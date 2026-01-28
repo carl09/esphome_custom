@@ -1,8 +1,8 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import switch
-from esphome.const import CONF_ID, ICON_AIR_FILTER
-from ..climate import daikin_312_ns, Daikin312Climate, CONF_DAIKIN_312_ID
+from esphome.const import ICON_AIR_FILTER
+from .. import CONF_DAIKIN_312_ID, Daikin312Climate, daikin_312_ns
 
 DEPENDENCIES = ["daikin_312"]
 CODEOWNERS = ["@carl09"]

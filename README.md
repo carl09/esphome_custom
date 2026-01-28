@@ -11,10 +11,42 @@ external_components:
   - source:
       type: git
       url: https://github.com/your-username/esphome_custom
-    components: [ st7789_i80 ]
+    components: [ st7789_i80, daikin_312 ]
 ```
 
 ## Available Components
+
+### `daikin_312`
+
+A climate component for controlling Daikin air conditioners that usage the 312-bit protocol (e.g., using the ARC466A58 remote).
+The implementation uses a custom logic for the IR protocol.
+
+**Features:**
+- Implements `climate` platform for controlling mode, temperature, fan speed, etc.
+- Supports an external sensor for current ambient temperature.
+- Provides a `switch` platform to control specific functions (e.g., Clean/Purify).
+
+**Configuration:**
+
+**Climate:**
+
+```yaml
+climate:
+  - platform: daikin_312
+    id: my_ac
+    name: "Living Room AC"
+    pin: GPIO4  # IR Transmitter pin
+    sensor: temp_sensor_id # Optional: ID of a sensor component for current temperature
+```
+
+**Switch (Clean/Purify):**
+
+```yaml
+switch:
+  - platform: daikin_312
+    name: "Living Room AC Clean"
+    daikin_312_id: my_ac
+```
 
 ### `st7789_i80`
 

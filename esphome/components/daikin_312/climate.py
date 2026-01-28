@@ -4,11 +4,10 @@ import esphome.config_validation as cv
 from esphome.components import climate, sensor
 from esphome.const import CONF_PIN, CONF_SENSOR
 
+from . import CONF_DAIKIN_312_ID, Daikin312Climate, daikin_312_ns
+
 CODEOWNERS = ["@carl09"]
 
-CONF_DAIKIN_312_ID = "daikin_312_id"
-
-daikin_312_ns = cg.esphome_ns.namespace("daikin_312")
 Daikin312Climate = daikin_312_ns.class_(
     "Daikin312Climate", climate.Climate, cg.Component
 )
