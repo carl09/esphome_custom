@@ -6,6 +6,7 @@ from esphome.const import CONF_PIN, CONF_SENSOR
 
 from . import CONF_DAIKIN_312_ID, Daikin312Climate, daikin_312_ns
 
+AUTO_LOAD = ["daikin_312"]
 CODEOWNERS = ["@carl09"]
 
 Daikin312Climate = daikin_312_ns.class_(
