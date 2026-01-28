@@ -42,6 +42,15 @@ async def to_code(config):
         sens = await cg.get_variable(sensor_config)
         cg.add(var.set_sensor(sens))
 
+    # Optimize IRremoteESP8266 build - disable all protocols except DAIKIN312
+    # This significantly reduces binary size
+    # BUT: if irremote_debug component is also used, we need all protocols
+    # enabled for debugging, so skip the restrictive flags
+    if "irremote_debug" not in CORE.config:
+        cg.add_build_flag("-D_IR_ENABLE_DEFAULT_=false")
+        cg.add_build_flag("-DSEND_DAIKIN312=true")
+        cg.add_build_flag("-DDECODE_DAIKIN312=true")
+
     cg.add_library(
         "IRremoteESP8266",
         None,

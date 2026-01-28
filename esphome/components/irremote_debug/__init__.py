@@ -59,6 +59,11 @@ async def to_code(config):
     cg.add(var.set_timeout(config[CONF_TIMEOUT]))
     cg.add(var.set_verbosity(config[CONF_VERBOSITY]))
 
+    # This debug component needs ALL protocols enabled to decode unknown/any IR signals.
+    # Explicitly set _IR_ENABLE_DEFAULT_=true to override any other component's
+    # restrictive settings (e.g., daikin_312 sets it to false for size optimization)
+    cg.add_build_flag("-D_IR_ENABLE_DEFAULT_=true")
+
     # Add the IRremoteESP8266 library from the fork
     cg.add_library(
         "IRremoteESP8266",
