@@ -37,7 +37,7 @@ async def to_code(config):
         cg.add(var.set_sensor(sens))
 
     cg.add_library(
-        None,
+        "IRremoteESP8266",
         None,
         "https://github.com/carl09/IRremoteESP8266.git#daikin_312",
     )
