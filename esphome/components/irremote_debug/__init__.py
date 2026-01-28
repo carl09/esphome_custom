@@ -9,6 +9,7 @@ from esphome.const import (
     CONF_BUFFER_SIZE,
     CONF_TIMEOUT,
 )
+from esphome.core import CORE
 
 CODEOWNERS = ["@carl09"]
 DEPENDENCIES = ["logger"]
@@ -43,6 +44,11 @@ CONFIG_SCHEMA = cv.Schema(
 
 
 async def to_code(config):
+    # Enable serial on ESP8266 as IRremoteESP8266 library uses Serial
+    if CORE.is_esp8266:
+        from esphome.components.esp8266.const import enable_serial
+        enable_serial()
+
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 

@@ -3,6 +3,7 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import climate, sensor
 from esphome.const import CONF_PIN, CONF_SENSOR
+from esphome.core import CORE
 
 from . import CONF_DAIKIN_312_ID, Daikin312Climate, daikin_312_ns
 
@@ -26,6 +27,11 @@ CONFIG_SCHEMA = (
 
 
 async def to_code(config):
+    # Enable serial on ESP8266 as IRremoteESP8266 library uses Serial
+    if CORE.is_esp8266:
+        from esphome.components.esp8266.const import enable_serial
+        enable_serial()
+
     var = await climate.new_climate(config)
     await cg.register_component(var, config)
 
