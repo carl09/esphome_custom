@@ -2,7 +2,7 @@ from esphome import pins
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import climate, sensor
-from esphome.const import CONF_ID, CONF_PIN, CONF_SENSOR
+from esphome.const import CONF_PIN, CONF_SENSOR
 
 CODEOWNERS = ["@carl09"]
 
@@ -13,19 +13,21 @@ Daikin312Climate = daikin_312_ns.class_(
     "Daikin312Climate", climate.Climate, cg.Component
 )
 
-CONFIG_SCHEMA = climate.CLIMATE_SCHEMA.extend(
-    {
-        cv.GenerateID(): cv.declare_id(Daikin312Climate),
-        cv.Required(CONF_PIN): pins.internal_gpio_output_pin_schema,
-        cv.Optional(CONF_SENSOR): cv.use_id(sensor.Sensor),
-    }
-).extend(cv.COMPONENT_SCHEMA)
+CONFIG_SCHEMA = (
+    climate.climate_schema(Daikin312Climate)
+    .extend(
+        {
+            cv.Required(CONF_PIN): pins.internal_gpio_output_pin_schema,
+            cv.Optional(CONF_SENSOR): cv.use_id(sensor.Sensor),
+        }
+    )
+    .extend(cv.COMPONENT_SCHEMA)
+)
 
 
 async def to_code(config):
-    var = cg.new_Pvariable(config[CONF_ID])
+    var = await climate.new_climate(config)
     await cg.register_component(var, config)
-    await climate.register_climate(var, config)
 
     pin = await cg.gpio_pin_expression(config[CONF_PIN])
     cg.add(var.set_pin(pin))
