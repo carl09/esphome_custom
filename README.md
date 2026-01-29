@@ -27,7 +27,6 @@ The implementation uses a custom logic for the IR protocol.
 - Supports external state sync from Home Assistant Daikin cloud integration.
 - Provides a `switch` platform to control specific functions (e.g., Purify, Eye).
 - Provides a `select` platform to control light and beep settings.
-- Provides a `number` platform to set the sleep timer duration.
 
 **Configuration:**
 
@@ -127,22 +126,6 @@ select:
     type: beep
     name: "Daikin Beep"
 ```
-
-**Number (Sleep Timer):**
-
-Sets the sleep timer duration in minutes. When enabled, the AC will automatically turn off after the specified duration. Set to 0 to disable the timer. State is automatically restored on boot.
-
-```yaml
-number:
-  - platform: daikin_312
-    daikin_312_id: my_ac
-    type: sleep_timer
-    name: "Daikin Sleep Timer"
-```
-
-- **Range:** 0-720 minutes (0 = off, max 12 hours)
-- **Unit:** minutes
-- **Note:** The sleep timer shares the timer location with the On Timer in the IR protocol. Enabling the sleep timer will disable any On Timer setting.
 
 ### `st7789_i80`
 
