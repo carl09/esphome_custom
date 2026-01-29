@@ -48,6 +48,17 @@ switch:
     daikin_312_id: my_ac
 ```
 
+**Select (Light):**
+
+Controls the LED lights on the AC unit.
+
+```yaml
+select:
+  - platform: daikin_312
+    daikin_312_id: my_ac
+    name: "Daikin Light"
+```
+
 ### `st7789_i80`
 
 A display driver for ST7789 screens connected via the Intel 8080 (8-bit parallel) interface.

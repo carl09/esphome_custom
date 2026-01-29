@@ -307,5 +307,19 @@ void Daikin312Climate::set_purify_enabled(bool enabled) {
   }
 }
 
+void Daikin312Climate::set_light(uint8_t light) {
+  if (this->ac_ != nullptr) {
+    this->ac_->setLight(light);
+    this->ac_->send();
+  }
+}
+
+uint8_t Daikin312Climate::get_light() {
+  if (this->ac_ != nullptr) {
+    return this->ac_->getLight();
+  }
+  return 3;  // Default to Off (kDaikinLightOff)
+}
+
 }  // namespace daikin_312
 }  // namespace esphome
