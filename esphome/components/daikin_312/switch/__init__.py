@@ -38,11 +38,13 @@ CONFIG_SCHEMA = (
             cv.Required(CONF_TYPE): cv.enum(SWITCH_TYPES, lower=True),
         }
     )
+    .extend(cv.COMPONENT_SCHEMA)
 )
 
 
 async def to_code(config):
     var = await switch.new_switch(config)
+    await cg.register_component(var, config)
     parent = await cg.get_variable(config[CONF_DAIKIN_312_ID])
     cg.add(var.set_parent(parent))
     cg.add(var.set_switch_type(config[CONF_TYPE]))

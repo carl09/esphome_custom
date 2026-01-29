@@ -43,6 +43,7 @@ CONFIG_SCHEMA = (
             cv.Required(CONF_TYPE): cv.enum(SELECT_TYPES, lower=True),
         }
     )
+    .extend(cv.COMPONENT_SCHEMA)
 )
 
 
