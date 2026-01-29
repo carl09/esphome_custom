@@ -14,6 +14,7 @@ static const char *const TAG = "daikin_312.climate";
 const uint8_t DEFAULT_TEMP_MIN = 18;         // Celsius
 const uint8_t DEFAULT_TEMP_MAX = 31;         // Celsius
 const uint8_t DEFAULT_TARGET_TEMP_MAX = 22;  // Celsius
+const uint32_t POWERFUL_MODE_DURATION_MS = 20 * 60 * 1000;  // 20 minutes in milliseconds
 
 void Daikin312Climate::setup() {
   if (this->sensor_) {
@@ -53,6 +54,34 @@ void Daikin312Climate::setup() {
 
   this->ac_->setPurify(true);
   this->ac_->setPurify(this->purify_enabled_);
+}
+
+void Daikin312Climate::loop() {
+  // Check if powerful mode should auto-expire (AC unit turns it off after 20 mins)
+  if (this->powerful_mode_active_) {
+    uint32_t now = millis();
+    if ((now - this->powerful_mode_start_time_) >= POWERFUL_MODE_DURATION_MS) {
+      this->clear_powerful_mode_();
+    }
+  }
+}
+
+void Daikin312Climate::clear_powerful_mode_() {
+  ESP_LOGD(TAG, "Powerful mode auto-expired after 20 minutes");
+  this->powerful_mode_active_ = false;
+  this->ac_->setPowerful(false);
+  
+  // Reset to previous fan mode or auto
+  if (this->fan_mode.has_value()) {
+    this->set_fan_mode_(false);
+  } else {
+    this->ac_->setFan(kDaikinFanAuto);
+    this->fan_mode = climate::CLIMATE_FAN_AUTO;
+  }
+  
+  // Clear the custom fan mode (Turbo) from UI
+  this->clear_custom_fan_mode_();
+  this->publish_state();
 }
 
 climate::ClimateTraits Daikin312Climate::traits() {
@@ -190,8 +219,12 @@ void Daikin312Climate::set_target_temperature_(bool send) {
 void Daikin312Climate::set_custom_fan_mode_(const std::string &mode) {
   if (str_equals_case_insensitive(mode, "Max")) {
     this->ac_->setFan(kDaikinFanMax);
+    this->powerful_mode_active_ = false;
   } else if (str_equals_case_insensitive(mode, "Turbo")) {
     this->ac_->setPowerful(true);
+    this->powerful_mode_active_ = true;
+    this->powerful_mode_start_time_ = millis();
+    ESP_LOGD(TAG, "Powerful mode activated - will auto-expire in 20 minutes");
   } else {
     ESP_LOGW(TAG, "Unknown Custom Fan Mode: %s", mode.c_str());
   }
@@ -227,6 +260,12 @@ void Daikin312Climate::set_fan_mode_(bool send) {
   // Ensure quiet mode is disabled when switching to non-quiet fan modes
   if (this->fan_mode.value() != climate::CLIMATE_FAN_QUIET) {
     this->ac_->setQuiet(false);
+  }
+
+  // Disable powerful mode when switching to a regular fan mode
+  if (this->powerful_mode_active_) {
+    this->ac_->setPowerful(false);
+    this->powerful_mode_active_ = false;
   }
 
   if (send) {
