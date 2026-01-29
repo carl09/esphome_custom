@@ -4,6 +4,7 @@
 #include "esphome/core/hal.h"
 #include "esphome/components/climate/climate.h"
 #include "esphome/components/sensor/sensor.h"
+#include "esphome/components/text_sensor/text_sensor.h"
 
 #include <ir_Daikin.h>
 
@@ -20,6 +21,13 @@ class Daikin312Climate : public climate::Climate, public Component {
 
   void set_sensor(sensor::Sensor *sensor) { this->sensor_ = sensor; }
   void set_pin(InternalGPIOPin *pin) { this->pin_ = pin; }
+
+  // External state sync from Home Assistant (no IR transmission)
+  void set_external_mode_sensor(text_sensor::TextSensor *sensor);
+  void set_external_temperature_sensor(sensor::Sensor *sensor);
+  void set_external_fan_mode_sensor(text_sensor::TextSensor *sensor);
+  void set_external_swing_mode_sensor(text_sensor::TextSensor *sensor);
+
 //   void set_mold_enabled(bool enabled);
   void set_purify_enabled(bool enabled);
   bool get_purify();
@@ -43,6 +51,18 @@ class Daikin312Climate : public climate::Climate, public Component {
   InternalGPIOPin *pin_{nullptr};
 //   bool mold_enabled_{true};
   bool purify_enabled_{true};
+
+  // External state sensors (for syncing from HA Daikin integration)
+  text_sensor::TextSensor *external_mode_sensor_{nullptr};
+  sensor::Sensor *external_temperature_sensor_{nullptr};
+  text_sensor::TextSensor *external_fan_mode_sensor_{nullptr};
+  text_sensor::TextSensor *external_swing_mode_sensor_{nullptr};
+
+  // Helper methods for external state updates
+  void update_mode_from_external_(const std::string &mode);
+  void update_temperature_from_external_(float temp);
+  void update_fan_mode_from_external_(const std::string &fan_mode);
+  void update_swing_mode_from_external_(const std::string &swing_mode);
   void set_mode_(bool send);
   void set_target_temperature_(bool send);
   void set_fan_mode_(bool send);

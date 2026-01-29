@@ -1,7 +1,7 @@
 from esphome import pins
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import climate, sensor
+from esphome.components import climate, sensor, text_sensor
 from esphome.const import CONF_PIN, CONF_SENSOR
 from esphome.core import CORE
 
@@ -9,6 +9,12 @@ from . import CONF_DAIKIN_312_ID, Daikin312Climate, daikin_312_ns
 
 AUTO_LOAD = ["daikin_312"]
 CODEOWNERS = ["@carl09"]
+
+# External state sync configuration keys
+CONF_EXTERNAL_MODE = "external_mode"
+CONF_EXTERNAL_TEMPERATURE = "external_temperature"
+CONF_EXTERNAL_FAN_MODE = "external_fan_mode"
+CONF_EXTERNAL_SWING_MODE = "external_swing_mode"
 
 Daikin312Climate = daikin_312_ns.class_(
     "Daikin312Climate", climate.Climate, cg.Component
@@ -20,6 +26,11 @@ CONFIG_SCHEMA = (
         {
             cv.Required(CONF_PIN): pins.internal_gpio_output_pin_schema,
             cv.Optional(CONF_SENSOR): cv.use_id(sensor.Sensor),
+            # External state sync from Home Assistant Daikin integration
+            cv.Optional(CONF_EXTERNAL_MODE): cv.use_id(text_sensor.TextSensor),
+            cv.Optional(CONF_EXTERNAL_TEMPERATURE): cv.use_id(sensor.Sensor),
+            cv.Optional(CONF_EXTERNAL_FAN_MODE): cv.use_id(text_sensor.TextSensor),
+            cv.Optional(CONF_EXTERNAL_SWING_MODE): cv.use_id(text_sensor.TextSensor),
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -41,6 +52,23 @@ async def to_code(config):
     if sensor_config := config.get(CONF_SENSOR):
         sens = await cg.get_variable(sensor_config)
         cg.add(var.set_sensor(sens))
+
+    # External state sync sensors
+    if external_mode := config.get(CONF_EXTERNAL_MODE):
+        ext_mode_sensor = await cg.get_variable(external_mode)
+        cg.add(var.set_external_mode_sensor(ext_mode_sensor))
+
+    if external_temp := config.get(CONF_EXTERNAL_TEMPERATURE):
+        ext_temp_sensor = await cg.get_variable(external_temp)
+        cg.add(var.set_external_temperature_sensor(ext_temp_sensor))
+
+    if external_fan := config.get(CONF_EXTERNAL_FAN_MODE):
+        ext_fan_sensor = await cg.get_variable(external_fan)
+        cg.add(var.set_external_fan_mode_sensor(ext_fan_sensor))
+
+    if external_swing := config.get(CONF_EXTERNAL_SWING_MODE):
+        ext_swing_sensor = await cg.get_variable(external_swing)
+        cg.add(var.set_external_swing_mode_sensor(ext_swing_sensor))
 
     # Optimize IRremoteESP8266 build - disable all protocols except DAIKIN312
     # This significantly reduces binary size

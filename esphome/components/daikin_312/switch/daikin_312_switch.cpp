@@ -10,18 +10,42 @@ void Daikin312Switch::setup() {
   if (this->parent_ == nullptr)
     return;
 
+  // Try to restore state from preferences first
+  auto restored = this->get_initial_state_with_restore_mode();
   bool state;
-  switch (this->type_) {
-    case DAIKIN312_SWITCH_EYE:
-      state = this->parent_->get_eye();
-      break;
-    case DAIKIN312_SWITCH_EYE_AUTO:
-      state = this->parent_->get_eye_auto();
-      break;
-    case DAIKIN312_SWITCH_PURIFY:
-    default:
-      state = this->parent_->get_purify();
-      break;
+  
+  if (restored.has_value()) {
+    // Use restored state from preferences
+    state = restored.value();
+    ESP_LOGD(TAG, "Restored state: %s", ONOFF(state));
+    
+    // Apply the restored state to the parent (without sending IR yet, parent handles that)
+    switch (this->type_) {
+      case DAIKIN312_SWITCH_EYE:
+        this->parent_->set_eye(state);
+        break;
+      case DAIKIN312_SWITCH_EYE_AUTO:
+        this->parent_->set_eye_auto(state);
+        break;
+      case DAIKIN312_SWITCH_PURIFY:
+      default:
+        this->parent_->set_purify_enabled(state);
+        break;
+    }
+  } else {
+    // No restore mode or no saved state, get current state from parent
+    switch (this->type_) {
+      case DAIKIN312_SWITCH_EYE:
+        state = this->parent_->get_eye();
+        break;
+      case DAIKIN312_SWITCH_EYE_AUTO:
+        state = this->parent_->get_eye_auto();
+        break;
+      case DAIKIN312_SWITCH_PURIFY:
+      default:
+        state = this->parent_->get_purify();
+        break;
+    }
   }
   this->publish_state(state);
 }

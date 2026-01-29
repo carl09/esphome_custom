@@ -1,6 +1,7 @@
 #pragma once
 
 #include "esphome/core/component.h"
+#include "esphome/core/preferences.h"
 #include "esphome/components/select/select.h"
 #include "../daikin_312.h"
 
@@ -25,6 +26,7 @@ class Daikin312Select : public select::Select, public Component {
 
   Daikin312Climate *parent_;
   Daikin312SelectType type_{DAIKIN312_SELECT_LIGHT};
+  ESPPreferenceObject pref_;
 };
 
 }  // namespace daikin_312

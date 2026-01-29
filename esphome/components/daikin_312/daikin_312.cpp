@@ -27,6 +27,28 @@ void Daikin312Climate::setup() {
     this->current_temperature = NAN;
   }
 
+  // Setup external state sensors for syncing from HA Daikin integration
+  if (this->external_mode_sensor_) {
+    this->external_mode_sensor_->add_on_state_callback([this](const std::string &state) {
+      this->update_mode_from_external_(state);
+    });
+  }
+  if (this->external_temperature_sensor_) {
+    this->external_temperature_sensor_->add_on_state_callback([this](float state) {
+      this->update_temperature_from_external_(state);
+    });
+  }
+  if (this->external_fan_mode_sensor_) {
+    this->external_fan_mode_sensor_->add_on_state_callback([this](const std::string &state) {
+      this->update_fan_mode_from_external_(state);
+    });
+  }
+  if (this->external_swing_mode_sensor_) {
+    this->external_swing_mode_sensor_->add_on_state_callback([this](const std::string &state) {
+      this->update_swing_mode_from_external_(state);
+    });
+  }
+
   // restore set points
   auto restore = this->restore_state_();
 
@@ -407,6 +429,129 @@ uint8_t Daikin312Climate::get_beep() {
     return this->ac_->getBeep();
   }
   return 3;  // Default to Off (kDaikinBeepOff)
+}
+
+// External state sensor setters
+void Daikin312Climate::set_external_mode_sensor(text_sensor::TextSensor *sensor) {
+  this->external_mode_sensor_ = sensor;
+}
+
+void Daikin312Climate::set_external_temperature_sensor(sensor::Sensor *sensor) {
+  this->external_temperature_sensor_ = sensor;
+}
+
+void Daikin312Climate::set_external_fan_mode_sensor(text_sensor::TextSensor *sensor) {
+  this->external_fan_mode_sensor_ = sensor;
+}
+
+void Daikin312Climate::set_external_swing_mode_sensor(text_sensor::TextSensor *sensor) {
+  this->external_swing_mode_sensor_ = sensor;
+}
+
+// External state update methods - update internal state without sending IR
+void Daikin312Climate::update_mode_from_external_(const std::string &mode) {
+  ESP_LOGD(TAG, "External mode update: %s", mode.c_str());
+
+  climate::ClimateMode new_mode;
+  if (str_equals_case_insensitive(mode, "off")) {
+    new_mode = climate::CLIMATE_MODE_OFF;
+  } else if (str_equals_case_insensitive(mode, "cool")) {
+    new_mode = climate::CLIMATE_MODE_COOL;
+  } else if (str_equals_case_insensitive(mode, "heat")) {
+    new_mode = climate::CLIMATE_MODE_HEAT;
+  } else if (str_equals_case_insensitive(mode, "heat_cool") || str_equals_case_insensitive(mode, "auto")) {
+    new_mode = climate::CLIMATE_MODE_HEAT_COOL;
+  } else if (str_equals_case_insensitive(mode, "dry")) {
+    new_mode = climate::CLIMATE_MODE_DRY;
+  } else if (str_equals_case_insensitive(mode, "fan_only") || str_equals_case_insensitive(mode, "fan")) {
+    new_mode = climate::CLIMATE_MODE_FAN_ONLY;
+  } else {
+    ESP_LOGW(TAG, "Unknown external mode: %s", mode.c_str());
+    return;
+  }
+
+  if (this->mode != new_mode) {
+    this->mode = new_mode;
+    // Update internal AC state without sending IR
+    this->set_mode_(false);
+    this->publish_state();
+  }
+}
+
+void Daikin312Climate::update_temperature_from_external_(float temp) {
+  ESP_LOGD(TAG, "External temperature update: %.1f", temp);
+
+  if (!isnan(temp) && temp >= DEFAULT_TEMP_MIN && temp <= DEFAULT_TEMP_MAX) {
+    if (this->target_temperature != temp) {
+      this->target_temperature = temp;
+      // Update internal AC state without sending IR
+      this->set_target_temperature_(false);
+      this->publish_state();
+    }
+  } else {
+    ESP_LOGW(TAG, "External temperature out of range: %.1f", temp);
+  }
+}
+
+void Daikin312Climate::update_fan_mode_from_external_(const std::string &fan_mode) {
+  ESP_LOGD(TAG, "External fan mode update: %s", fan_mode.c_str());
+
+  optional<climate::ClimateFanMode> new_fan_mode;
+
+  if (str_equals_case_insensitive(fan_mode, "auto")) {
+    new_fan_mode = climate::CLIMATE_FAN_AUTO;
+  } else if (str_equals_case_insensitive(fan_mode, "quiet") || str_equals_case_insensitive(fan_mode, "low")) {
+    // HA Daikin uses "low" for quiet mode
+    new_fan_mode = climate::CLIMATE_FAN_QUIET;
+  } else if (str_equals_case_insensitive(fan_mode, "1") || str_equals_case_insensitive(fan_mode, "min")) {
+    new_fan_mode = climate::CLIMATE_FAN_LOW;
+  } else if (str_equals_case_insensitive(fan_mode, "2") || str_equals_case_insensitive(fan_mode, "3") ||
+             str_equals_case_insensitive(fan_mode, "medium") || str_equals_case_insensitive(fan_mode, "mid")) {
+    new_fan_mode = climate::CLIMATE_FAN_MEDIUM;
+  } else if (str_equals_case_insensitive(fan_mode, "4") || str_equals_case_insensitive(fan_mode, "5") ||
+             str_equals_case_insensitive(fan_mode, "high") || str_equals_case_insensitive(fan_mode, "max")) {
+    new_fan_mode = climate::CLIMATE_FAN_HIGH;
+  } else {
+    ESP_LOGW(TAG, "Unknown external fan mode: %s", fan_mode.c_str());
+    return;
+  }
+
+  if (new_fan_mode.has_value() && (!this->fan_mode.has_value() || this->fan_mode.value() != new_fan_mode.value())) {
+    this->clear_custom_fan_mode_();
+    this->fan_mode = new_fan_mode.value();
+    // Update internal AC state without sending IR
+    this->set_fan_mode_(false);
+    this->publish_state();
+  }
+}
+
+void Daikin312Climate::update_swing_mode_from_external_(const std::string &swing_mode) {
+  ESP_LOGD(TAG, "External swing mode update: %s", swing_mode.c_str());
+
+  climate::ClimateSwingMode new_swing_mode;
+
+  if (str_equals_case_insensitive(swing_mode, "off")) {
+    new_swing_mode = climate::CLIMATE_SWING_OFF;
+  } else if (str_equals_case_insensitive(swing_mode, "both")) {
+    new_swing_mode = climate::CLIMATE_SWING_BOTH;
+  } else if (str_equals_case_insensitive(swing_mode, "vertical")) {
+    new_swing_mode = climate::CLIMATE_SWING_VERTICAL;
+  } else if (str_equals_case_insensitive(swing_mode, "horizontal")) {
+    new_swing_mode = climate::CLIMATE_SWING_HORIZONTAL;
+  } else if (str_equals_case_insensitive(swing_mode, "on")) {
+    // HA might report just "on" for swing, default to both
+    new_swing_mode = climate::CLIMATE_SWING_BOTH;
+  } else {
+    ESP_LOGW(TAG, "Unknown external swing mode: %s", swing_mode.c_str());
+    return;
+  }
+
+  if (this->swing_mode != new_swing_mode) {
+    this->swing_mode = new_swing_mode;
+    // Update internal AC state without sending IR
+    this->set_swing_mode_(false);
+    this->publish_state();
+  }
 }
 
 }  // namespace daikin_312
