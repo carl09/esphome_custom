@@ -39,13 +39,27 @@ climate:
     sensor: temp_sensor_id # Optional: ID of a sensor component for current temperature
 ```
 
-**Switch (Clean/Purify):**
+**Switch (Purify, Eye, Eye Auto):**
+
+Controls various AC unit features:
+- `purify`: Enables the air purification/clean function
+- `eye`: Enables the motion sensor (Intelligent Eye)
+- `eye_auto`: Enables automatic eye mode
 
 ```yaml
 switch:
   - platform: daikin_312
-    name: "Living Room AC Clean"
     daikin_312_id: my_ac
+    type: purify  # Options: purify, eye, eye_auto
+    name: "Living Room AC Clean"
+  - platform: daikin_312
+    daikin_312_id: my_ac
+    type: eye
+    name: "Living Room AC Eye"
+  - platform: daikin_312
+    daikin_312_id: my_ac
+    type: eye_auto
+    name: "Living Room AC Eye Auto"
 ```
 
 **Select (Light & Beep):**

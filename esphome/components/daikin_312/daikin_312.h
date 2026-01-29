@@ -22,6 +22,11 @@ class Daikin312Climate : public climate::Climate, public Component {
   void set_pin(InternalGPIOPin *pin) { this->pin_ = pin; }
 //   void set_mold_enabled(bool enabled);
   void set_purify_enabled(bool enabled);
+  bool get_purify();
+  void set_eye(bool enabled);
+  bool get_eye();
+  void set_eye_auto(bool enabled);
+  bool get_eye_auto();
   void set_light(uint8_t light);
   uint8_t get_light();
   void set_beep(uint8_t beep);

@@ -346,6 +346,41 @@ void Daikin312Climate::set_purify_enabled(bool enabled) {
   }
 }
 
+bool Daikin312Climate::get_purify() {
+  if (this->ac_ != nullptr) {
+    return this->ac_->getPurify();
+  }
+  return false;
+}
+
+void Daikin312Climate::set_eye(bool enabled) {
+  if (this->ac_ != nullptr) {
+    this->ac_->setEye(enabled);
+    this->ac_->send();
+  }
+}
+
+bool Daikin312Climate::get_eye() {
+  if (this->ac_ != nullptr) {
+    return this->ac_->getEye();
+  }
+  return false;
+}
+
+void Daikin312Climate::set_eye_auto(bool enabled) {
+  if (this->ac_ != nullptr) {
+    this->ac_->setEyeAuto(enabled);
+    this->ac_->send();
+  }
+}
+
+bool Daikin312Climate::get_eye_auto() {
+  if (this->ac_ != nullptr) {
+    return this->ac_->getEyeAuto();
+  }
+  return false;
+}
+
 void Daikin312Climate::set_light(uint8_t light) {
   if (this->ac_ != nullptr) {
     this->ac_->setLight(light);
