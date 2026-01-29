@@ -79,6 +79,12 @@ climate:
     external_temperature: ext_ha_temp
     external_fan_mode: ext_ha_fan
     external_swing_mode: ext_ha_swing
+    on_turn_off:
+      - homeassistant.action:
+          action: climate.turn_off
+          data:
+            entity_id: climate.daikin1
+      - logger.log: "AC turned off via IR - backup service called"
 ```
 
 **Switch (Purify, Eye, Eye Auto):**

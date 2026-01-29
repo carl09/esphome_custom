@@ -1,6 +1,7 @@
 #pragma once
 
 #include "esphome/core/component.h"
+#include "esphome/core/automation.h"
 #include "esphome/core/hal.h"
 #include "esphome/components/climate/climate.h"
 #include "esphome/components/sensor/sensor.h"
@@ -21,6 +22,9 @@ class Daikin312Climate : public climate::Climate, public Component {
 
   void set_sensor(sensor::Sensor *sensor) { this->sensor_ = sensor; }
   void set_pin(InternalGPIOPin *pin) { this->pin_ = pin; }
+
+  // Automation triggers
+  void set_turn_off_trigger(Trigger<> *trigger) { this->turn_off_trigger_ = trigger; }
 
   // External state sync from Home Assistant (no IR transmission)
   void set_external_mode_sensor(text_sensor::TextSensor *sensor);
@@ -74,6 +78,9 @@ class Daikin312Climate : public climate::Climate, public Component {
   void clear_powerful_mode_();
   uint32_t powerful_mode_start_time_{0};
   bool powerful_mode_active_{false};
+
+  // Automation triggers
+  Trigger<> *turn_off_trigger_{nullptr};
 };
 
 }  // namespace daikin_312

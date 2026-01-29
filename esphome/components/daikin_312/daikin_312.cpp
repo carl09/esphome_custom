@@ -138,6 +138,11 @@ void Daikin312Climate::control(const climate::ClimateCall &call) {
   if (call.get_mode().has_value()) {
     this->mode = *call.get_mode();
     this->set_mode_(true);
+
+    // Fire on_turn_off trigger when mode is set to OFF (only from local control, not external)
+    if (this->mode == climate::CLIMATE_MODE_OFF && this->turn_off_trigger_ != nullptr) {
+      this->turn_off_trigger_->trigger();
+    }
   }
 
   if (call.get_target_temperature().has_value()) {
