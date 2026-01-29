@@ -82,10 +82,10 @@ void Daikin312Select::setup() {
 void Daikin312Select::dump_config() {
   if (this->type_ == DAIKIN312_SELECT_BEEP) {
     LOG_SELECT("", "Daikin 312 Beep", this);
-    ESP_LOGCONFIG(TAG, "  Current value: %s", this->state.c_str());
+    ESP_LOGCONFIG(TAG, "  Current value: %s", this->current_option().c_str());
   } else {
     LOG_SELECT("", "Daikin 312 Light", this);
-    ESP_LOGCONFIG(TAG, "  Current value: %s", this->state.c_str());
+    ESP_LOGCONFIG(TAG, "  Current value: %s", this->current_option().c_str());
   }
 }
 

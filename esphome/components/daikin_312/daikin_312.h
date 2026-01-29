@@ -83,5 +83,8 @@ class Daikin312Climate : public climate::Climate, public Component {
   Trigger<> *turn_off_trigger_{nullptr};
 };
 
+// Trigger class for on_turn_off automation
+class Daikin312TurnOffTrigger : public Trigger<> {};
+
 }  // namespace daikin_312
 }  // namespace esphome
