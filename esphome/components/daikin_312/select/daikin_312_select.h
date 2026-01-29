@@ -7,9 +7,15 @@
 namespace esphome {
 namespace daikin_312 {
 
-class Daikin312LightSelect : public select::Select, public Component {
+enum Daikin312SelectType : uint8_t {
+  DAIKIN312_SELECT_LIGHT = 0,
+  DAIKIN312_SELECT_BEEP = 1,
+};
+
+class Daikin312Select : public select::Select, public Component {
  public:
   void set_parent(Daikin312Climate *parent) { this->parent_ = parent; }
+  void set_select_type(Daikin312SelectType type) { this->type_ = type; }
 
   void setup() override;
   void dump_config() override;
@@ -18,6 +24,7 @@ class Daikin312LightSelect : public select::Select, public Component {
   void control(const std::string &value) override;
 
   Daikin312Climate *parent_;
+  Daikin312SelectType type_{DAIKIN312_SELECT_LIGHT};
 };
 
 }  // namespace daikin_312

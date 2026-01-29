@@ -15,6 +15,7 @@ namespace daikin_312 {
 class Daikin312Climate : public climate::Climate, public Component {
  public:
   void setup() override;
+  void loop() override;
   float get_setup_priority() const override { return setup_priority::DATA; }
 
   void set_sensor(sensor::Sensor *sensor) { this->sensor_ = sensor; }
@@ -23,6 +24,8 @@ class Daikin312Climate : public climate::Climate, public Component {
   void set_purify_enabled(bool enabled);
   void set_light(uint8_t light);
   uint8_t get_light();
+  void set_beep(uint8_t beep);
+  uint8_t get_beep();
 
   void dump_config() override;
 
@@ -43,6 +46,9 @@ class Daikin312Climate : public climate::Climate, public Component {
   void set_preset_(bool send);
   void set_custom_fan_mode_(const std::string &mode);
   void transmit_state_();
+  void clear_powerful_mode_();
+  uint32_t powerful_mode_start_time_{0};
+  bool powerful_mode_active_{false};
 };
 
 }  // namespace daikin_312

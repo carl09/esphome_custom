@@ -48,15 +48,20 @@ switch:
     daikin_312_id: my_ac
 ```
 
-**Select (Light):**
+**Select (Light & Beep):**
 
-Controls the LED lights on the AC unit.
+Controls the LED status lights on the AC unit and the beep sound when receiving IR commands.
 
 ```yaml
 select:
   - platform: daikin_312
     daikin_312_id: my_ac
+    type: light  # Options: light, beep
     name: "Daikin Light"
+  - platform: daikin_312
+    daikin_312_id: my_ac
+    type: beep
+    name: "Daikin Beep"
 ```
 
 ### `st7789_i80`

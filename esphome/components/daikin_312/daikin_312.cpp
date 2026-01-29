@@ -360,5 +360,19 @@ uint8_t Daikin312Climate::get_light() {
   return 3;  // Default to Off (kDaikinLightOff)
 }
 
+void Daikin312Climate::set_beep(uint8_t beep) {
+  if (this->ac_ != nullptr) {
+    this->ac_->setBeep(beep);
+    this->ac_->send();
+  }
+}
+
+uint8_t Daikin312Climate::get_beep() {
+  if (this->ac_ != nullptr) {
+    return this->ac_->getBeep();
+  }
+  return 3;  // Default to Off (kDaikinBeepOff)
+}
+
 }  // namespace daikin_312
 }  // namespace esphome
