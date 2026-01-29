@@ -43,6 +43,9 @@ class Daikin312Climate : public climate::Climate, public Component {
   uint8_t get_light();
   void set_beep(uint8_t beep);
   uint8_t get_beep();
+  void set_sleep_timer(uint16_t minutes);
+  uint16_t get_sleep_timer();
+  bool get_sleep_timer_enabled();
 
   void dump_config() override;
 

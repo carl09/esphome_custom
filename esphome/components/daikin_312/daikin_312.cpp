@@ -436,6 +436,31 @@ uint8_t Daikin312Climate::get_beep() {
   return 3;  // Default to Off (kDaikinBeepOff)
 }
 
+void Daikin312Climate::set_sleep_timer(uint16_t minutes) {
+  if (this->ac_ != nullptr) {
+    if (minutes == 0) {
+      this->ac_->disableSleepTimer();
+    } else {
+      this->ac_->enableSleepTimer(minutes);
+    }
+    this->ac_->send();
+  }
+}
+
+uint16_t Daikin312Climate::get_sleep_timer() {
+  if (this->ac_ != nullptr) {
+    return this->ac_->getSleepTime();
+  }
+  return 0;
+}
+
+bool Daikin312Climate::get_sleep_timer_enabled() {
+  if (this->ac_ != nullptr) {
+    return this->ac_->getSleepTimerEnabled();
+  }
+  return false;
+}
+
 // External state sensor setters
 void Daikin312Climate::set_external_mode_sensor(text_sensor::TextSensor *sensor) {
   this->external_mode_sensor_ = sensor;
