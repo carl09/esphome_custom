@@ -102,6 +102,6 @@ async def to_code(config):
     cg.add_library(
         "IRremoteESP8266",
         None,
-        "https://github.com/carl09/IRremoteESP8266.git#daikin_312",
+        # "https://github.com/carl09/IRremoteESP8266.git#daikin_312",
     )
 
