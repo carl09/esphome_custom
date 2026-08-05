@@ -94,13 +94,17 @@ Controls various AC unit features with state restoration on boot:
 - `eye`: Enables the motion sensor (Intelligent Eye)
 - `eye_auto`: Enables automatic eye mode
 
+Set `restore_mode` to `RESTORE_DEFAULT_ON` or `RESTORE_DEFAULT_OFF` to
+choose the default state when no saved state exists. This works for all three
+switch types; a saved state takes precedence on subsequent boots.
+
 ```yaml
 switch:
   - platform: daikin_312
     daikin_312_id: my_ac
     type: purify  # Options: purify, eye, eye_auto
     name: "Living Room AC Clean"
-    restore_mode: RESTORE_DEFAULT_OFF  # Optional: restore state on boot
+    restore_mode: RESTORE_DEFAULT_ON  # Optional: default to on on first boot
   - platform: daikin_312
     daikin_312_id: my_ac
     type: eye
@@ -121,11 +125,16 @@ select:
     daikin_312_id: my_ac
     type: light  # Options: light, beep
     name: "Daikin Light"
+    initial_option: Dim  # Optional: Off, Dim, or Bright
   - platform: daikin_312
     daikin_312_id: my_ac
     type: beep
     name: "Daikin Beep"
 ```
+
+`initial_option` sets the light selection and sends the corresponding IR command
+when no previously saved light state exists. Once a light state has been saved,
+that restored state takes precedence on boot.
 
 ### `st7789_i80`
 

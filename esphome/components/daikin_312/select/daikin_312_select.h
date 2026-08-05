@@ -17,6 +17,10 @@ class Daikin312Select : public select::Select, public Component {
  public:
   void set_parent(Daikin312Climate *parent) { this->parent_ = parent; }
   void set_select_type(Daikin312SelectType type) { this->type_ = type; }
+  void set_initial_option(const std::string &initial_option) {
+    this->initial_option_ = initial_option;
+    this->has_initial_option_ = true;
+  }
 
   void setup() override;
   void dump_config() override;
@@ -26,6 +30,8 @@ class Daikin312Select : public select::Select, public Component {
 
   Daikin312Climate *parent_;
   Daikin312SelectType type_{DAIKIN312_SELECT_LIGHT};
+  std::string initial_option_;
+  bool has_initial_option_{false};
   ESPPreferenceObject pref_;
 };
 

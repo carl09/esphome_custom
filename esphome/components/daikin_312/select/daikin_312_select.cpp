@@ -44,6 +44,21 @@ void Daikin312Select::setup() {
       this->parent_->set_light(light_value);
     }
     this->publish_state(restored_index);
+  } else if (this->type_ == DAIKIN312_SELECT_LIGHT && this->has_initial_option_) {
+    uint8_t light_value;
+    const char *light_option;
+    if (this->initial_option_ == "Bright") {
+      light_value = 1;  // kDaikinLightBright
+      light_option = "Bright";
+    } else if (this->initial_option_ == "Dim") {
+      light_value = 2;  // kDaikinLightDim
+      light_option = "Dim";
+    } else {
+      light_value = 3;  // kDaikinLightOff
+      light_option = "Off";
+    }
+    this->parent_->set_light(light_value);
+    this->publish_state(light_option);
   } else {
     // No saved state, get current state from parent
     uint8_t value;

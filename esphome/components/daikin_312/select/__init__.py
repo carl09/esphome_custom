@@ -8,6 +8,7 @@ DEPENDENCIES = ["daikin_312"]
 CODEOWNERS = ["@carl09"]
 
 ICON_VOLUME = "mdi:volume-high"
+CONF_INITIAL_OPTION = "initial_option"
 
 Daikin312Select = daikin_312_ns.class_(
     "Daikin312Select", select.Select, cg.Component
@@ -35,15 +36,23 @@ def get_icon(type_):
     return ICON_LIGHTBULB
 
 
-CONFIG_SCHEMA = (
+def validate_initial_option(config):
+    if CONF_INITIAL_OPTION in config and config[CONF_TYPE] != "light":
+        raise cv.Invalid("'initial_option' is only supported when type is 'light'")
+    return config
+
+
+CONFIG_SCHEMA = cv.All(
     select.select_schema(Daikin312Select, entity_category=ENTITY_CATEGORY_CONFIG)
     .extend(
         {
             cv.Required(CONF_DAIKIN_312_ID): cv.use_id(Daikin312Climate),
             cv.Required(CONF_TYPE): cv.enum(SELECT_TYPES, lower=True),
+            cv.Optional(CONF_INITIAL_OPTION): cv.one_of(*LIGHT_OPTIONS),
         }
     )
-    .extend(cv.COMPONENT_SCHEMA)
+    .extend(cv.COMPONENT_SCHEMA),
+    validate_initial_option,
 )
 
 
@@ -55,3 +64,5 @@ async def to_code(config):
     parent = await cg.get_variable(config[CONF_DAIKIN_312_ID])
     cg.add(var.set_parent(parent))
     cg.add(var.set_select_type(config[CONF_TYPE]))
+    if CONF_INITIAL_OPTION in config:
+        cg.add(var.set_initial_option(config[CONF_INITIAL_OPTION]))
