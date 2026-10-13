@@ -18,6 +18,7 @@ class CobiBikeComponent final : public PollingComponent, public ble_client::BLEC
   void update() override;
   void loop() override;
 
+  void set_discovery_scan(bool enabled) { this->discovery_scan_enabled_ = enabled; }
   void set_pairing(bool enabled) { this->pairing_enabled_ = enabled; }
   void set_wake_hub(bool enabled) { this->wake_hub_enabled_ = enabled; }
   void set_traction_battery_level_sensor(sensor::Sensor *sensor) { this->traction_battery_level_sensor_ = sensor; }
@@ -107,6 +108,11 @@ class CobiBikeComponent final : public PollingComponent, public ble_client::BLEC
   bool counter_sync_ready_{true};
   bool session_ready_{false};
   bool unknown_message_logged_{false};
+  bool discovery_scan_enabled_{false};
+  bool discovery_scan_started_{false};
+  size_t discovery_scan_index_{0};
+  uint32_t discovery_scan_last_ms_{0};
+  uint32_t discovery_scan_logged_{0};
 };
 
 }  // namespace esphome::cobi_bike

@@ -55,6 +55,9 @@ cobi_bike:
   # Needed the first time, with the hub in pairing mode (see above). The bond
   # is persisted, so this can be false afterwards.
   pair: false
+  # Optional diagnostic: once the session is ready, send ~90 read-only READs one at a time and log every raw
+  # response as 'SCAN tx' / 'SCAN rx' (INFO) so unmapped values can be decoded. Turn off afterwards.
+  discovery_scan: false
   # Optional: send the app-style lifecycle wake WRITE if the hub reports AWAY.
   # Runs only after the BLE/GATT and COBI AIR transports are established.
   wake_hub: false

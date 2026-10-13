@@ -46,6 +46,104 @@ static uint32_t read_u32_be(const uint8_t *data) {
          (static_cast<uint32_t>(data[2]) << 8) | data[3];
 }
 
+// Read-only properties declared for the AIR hub (see docs/cobi-bike-protocol-reference.md). Used only by the opt-in
+// `discovery_scan`, which sends one READ at a time and logs the raw responses.
+static constexpr uint8_t DISCOVERY_SCAN[][2] = {
+    {3, 1},  // Hub.partNumber
+    {3, 2},  // Hub.hardwareRevision
+    {3, 3},  // Hub.mcuFirmwareVersion
+    {3, 9},  // Hub.motorInterfaceId
+    {3, 10},  // Hub.motorInterfaceReady
+    {3, 11},  // Hub.motorControllerInterfaceId
+    {3, 12},  // Hub.motorControllerInterfaceReady
+    {3, 13},  // Hub.transmissionInterfaceId
+    {3, 14},  // Hub.transmissionInterfaceReady
+    {3, 15},  // Hub.thumbControllerInterfaceId
+    {3, 16},  // Hub.thumbControllerInterfaceReady
+    {3, 17},  // Hub.batteryInterfaceId
+    {3, 18},  // Hub.batteryInterfaceReady
+    {3, 23},  // Hub.thumbControllerMapping
+    {3, 24},  // Hub.ambientLight
+    {3, 25},  // Hub.ecoModeConfig
+    {3, 40},  // Hub.ambientLightState
+    {3, 42},  // Hub.socFlags
+    {3, 46},  // Hub.logInterfaces
+    {3, 48},  // Hub.disconnectReason
+    {3, 49},  // Hub.bleBufferLevel
+    {3, 53},  // Hub.usbState
+    {3, 54},  // Hub.mobileAppMode
+    {3, 55},  // Hub.errorAcknowledgement
+    {4, 1},  // ThumbController.partNumber
+    {4, 2},  // ThumbController.hardwareRevision
+    {4, 3},  // ThumbController.firmwareVersion
+    {4, 4},  // ThumbController.serialNumber
+    {4, 6},  // ThumbController.controlTurnSignals
+    {5, 1},  // Battery.partNumber
+    {5, 2},  // Battery.hardwareRevision
+    {5, 3},  // Battery.firmwareVersion
+    {5, 4},  // Battery.serialNumber
+    {5, 9},  // Battery.type
+    {5, 10},  // Battery.chargerVersion
+    {6, 1},  // FrontLight.partNumber
+    {6, 2},  // FrontLight.hardwareRevision
+    {6, 3},  // FrontLight.firmwareVersion
+    {6, 4},  // FrontLight.serialNumber
+    {6, 6},  // FrontLight.lightConfig
+    {6, 7},  // FrontLight.mountedLights
+    {6, 9},  // FrontLight.portConfig
+    {7, 1},  // Motor.partNumber
+    {7, 2},  // Motor.hardwareRevision
+    {7, 3},  // Motor.firmwareVersion
+    {7, 4},  // Motor.serialNumber
+    {7, 12},  // Motor.supportedDriveModes
+    {7, 13},  // Motor.driveMode
+    {7, 14},  // Motor.autoMovementControl
+    {7, 15},  // Motor.engineAssistance
+    {7, 16},  // Motor.energyConsumption
+    {7, 17},  // Motor.energyConsumptionPerKm
+    {7, 21},  // Motor.hasReverse
+    {7, 22},  // Motor.condition
+    {7, 24},  // Motor.features
+    {7, 25},  // Motor.nextService
+    {7, 26},  // Motor.customOemId
+    {7, 28},  // Motor.type
+    {7, 30},  // Motor.oemWheelCircumferenceConfiguration
+    {7, 31},  // Motor.wheelCircumference
+    {7, 32},  // Motor.acceleration
+    {8, 1},  // MotorController.partNumber
+    {8, 2},  // MotorController.hardwareRevision
+    {8, 3},  // MotorController.firmwareVersion
+    {8, 4},  // MotorController.serialNumber
+    {9, 1},  // Transmission.partNumber
+    {9, 2},  // Transmission.hardwareRevision
+    {9, 3},  // Transmission.firmwareVersion
+    {9, 4},  // Transmission.serialNumber
+    {9, 9},  // Transmission.mode
+    {9, 10},  // Transmission.desiredCadence
+    {9, 11},  // Transmission.cadenceControl
+    {9, 12},  // Transmission.condition
+    {9, 13},  // Transmission.features
+    {27, 0},  // BatteryController BatteryController.slots
+    {27, 2},  // BatteryController.state
+    {28, 1},  // BatteryTwo.partNumber
+    {28, 2},  // BatteryTwo.hardwareRevision
+    {28, 3},  // BatteryTwo.firmwareVersion
+    {28, 4},  // BatteryTwo.serialNumber
+    {28, 6},  // BatteryTwo.state
+    {28, 8},  // BatteryTwo.health
+    {28, 9},  // BatteryTwo.type
+    {28, 10},  // BatteryTwo.chargerVersion
+    {5, 8},  // Battery.health (re-read for raw logging)
+    {7, 8},  // Motor.distance
+    {7, 10},  // Motor.assistanceIndicator
+    {7, 11},  // Motor.range
+    {7, 18},  // Motor.batteryRange
+    {7, 29},  // Motor.powerOnTime
+};
+static constexpr size_t DISCOVERY_SCAN_COUNT = sizeof(DISCOVERY_SCAN) / sizeof(DISCOVERY_SCAN[0]);
+static constexpr uint32_t DISCOVERY_SCAN_INTERVAL_MS = 400;
+static constexpr uint32_t DISCOVERY_SCAN_MAX_LOGGED = 400;
+
 void CobiBikeComponent::setup() { this->set_link_status_("Waiting for COBI BLE connection"); }
 
 void CobiBikeComponent::dump_config() {
@@ -92,6 +190,26 @@ void CobiBikeComponent::update() {
 }
 
 void CobiBikeComponent::loop() {
+  if (this->discovery_scan_enabled_ && this->session_ready_ && this->c2p_handle_ != 0 && this->parent() != nullptr &&
+      (!this->wake_hub_enabled_ || this->hub_awake_) && this->discovery_scan_index_ < DISCOVERY_SCAN_COUNT &&
+      millis() - this->discovery_scan_last_ms_ >= DISCOVERY_SCAN_INTERVAL_MS) {
+    if (!this->discovery_scan_started_) {
+      this->discovery_scan_started_ = true;
+      ESP_LOGI(TAG, "DISCOVERY SCAN started: %u read-only READs, one every %u ms; raw bus batches are logged as 'SCAN rx'",
+               static_cast<unsigned>(DISCOVERY_SCAN_COUNT), static_cast<unsigned>(DISCOVERY_SCAN_INTERVAL_MS));
+    }
+    this->discovery_scan_last_ms_ = millis();
+    const uint8_t channel = DISCOVERY_SCAN[this->discovery_scan_index_][0];
+    const uint8_t property = DISCOVERY_SCAN[this->discovery_scan_index_][1];
+    this->discovery_scan_index_++;
+    const std::array<uint8_t, 2> bus = {static_cast<uint8_t>(channel << 2), property};  // V2 READ
+    ESP_LOGI(TAG, "SCAN tx %u/%u: READ channel=%u property=%u", static_cast<unsigned>(this->discovery_scan_index_),
+             static_cast<unsigned>(DISCOVERY_SCAN_COUNT), channel, property);
+    this->send_bus_payload_(bus.data(), bus.size(), "discovery scan READ");
+    if (this->discovery_scan_index_ == DISCOVERY_SCAN_COUNT)
+      ESP_LOGI(TAG, "DISCOVERY SCAN finished sending; responses may still arrive");
+  }
+
   if (!this->session_ready_ || !this->wake_hub_enabled_ || this->hub_awake_ ||
       (this->application_mode_known_ && !this->application_mode_is_app_))
     return;
@@ -502,6 +620,12 @@ size_t CobiBikeComponent::known_payload_length_(uint8_t action, uint8_t channel,
 }
 
 void CobiBikeComponent::handle_bus_messages_(const uint8_t *data, size_t length) {
+  if (this->discovery_scan_started_ && this->discovery_scan_logged_ < DISCOVERY_SCAN_MAX_LOGGED) {
+    this->discovery_scan_logged_++;
+    char hex[3 * 48 + 1];
+    format_hex_pretty_to(hex, sizeof(hex), data, std::min<size_t>(length, 48));
+    ESP_LOGI(TAG, "SCAN rx (%u bytes): %s", static_cast<unsigned>(length), hex);
+  }
   size_t offset = 0;
   while (offset + 2 <= length) {
     const uint8_t header = data[offset++];
