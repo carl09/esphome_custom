@@ -25,6 +25,13 @@ CONF_BATTERY_CAPACITY_RAW = "battery_capacity_raw"
 CONF_HUB_BATTERY_LEVEL = "hub_battery_level"
 CONF_HUB_BATTERY_STATE = "hub_battery_state"
 CONF_MOTOR_POWER_ON_TIME_RAW = "motor_power_on_time_raw"
+CONF_ODOMETER = "odometer"
+CONF_MOTOR_RANGE = "motor_range"
+CONF_BATTERY_RANGE = "battery_range"
+CONF_SPEED = "speed"
+CONF_CADENCE = "cadence"
+CONF_RIDER_POWER = "rider_power"
+CONF_ASSIST_LEVEL = "assist_level"
 CONF_LINK_STATUS = "link_status"
 
 SENSOR_KEYS = {
@@ -35,6 +42,13 @@ SENSOR_KEYS = {
     CONF_BATTERY_CAPACITY_RAW: "set_battery_capacity_raw_sensor",
     CONF_HUB_BATTERY_LEVEL: "set_hub_battery_level_sensor",
     CONF_MOTOR_POWER_ON_TIME_RAW: "set_motor_power_on_time_raw_sensor",
+    CONF_ODOMETER: "set_odometer_sensor",
+    CONF_MOTOR_RANGE: "set_motor_range_sensor",
+    CONF_BATTERY_RANGE: "set_battery_range_sensor",
+    CONF_SPEED: "set_speed_sensor",
+    CONF_CADENCE: "set_cadence_sensor",
+    CONF_RIDER_POWER: "set_rider_power_sensor",
+    CONF_ASSIST_LEVEL: "set_assist_level_sensor",
 }
 
 TEXT_SENSOR_KEYS = {
@@ -79,6 +93,29 @@ CONFIG_SCHEMA = cv.All(
             ),
             cv.Optional(CONF_HUB_BATTERY_STATE): text_sensor.text_sensor_schema(),
             cv.Optional(CONF_MOTOR_POWER_ON_TIME_RAW): RAW_SENSOR_SCHEMA,
+            cv.Optional(CONF_ODOMETER): sensor.sensor_schema(
+                unit_of_measurement="km",
+                accuracy_decimals=2,
+                icon="mdi:counter",
+                device_class="distance",
+                state_class="total_increasing",
+            ),
+            cv.Optional(CONF_MOTOR_RANGE): sensor.sensor_schema(
+                unit_of_measurement="km", accuracy_decimals=0, icon="mdi:map-marker-distance"
+            ),
+            cv.Optional(CONF_BATTERY_RANGE): sensor.sensor_schema(
+                unit_of_measurement="km", accuracy_decimals=1, icon="mdi:map-marker-distance"
+            ),
+            cv.Optional(CONF_SPEED): sensor.sensor_schema(
+                unit_of_measurement="km/h", accuracy_decimals=1, device_class="speed", state_class="measurement"
+            ),
+            cv.Optional(CONF_CADENCE): sensor.sensor_schema(
+                unit_of_measurement="rpm", accuracy_decimals=0, icon="mdi:rotate-right", state_class="measurement"
+            ),
+            cv.Optional(CONF_RIDER_POWER): sensor.sensor_schema(
+                unit_of_measurement="W", accuracy_decimals=0, device_class="power", state_class="measurement"
+            ),
+            cv.Optional(CONF_ASSIST_LEVEL): sensor.sensor_schema(accuracy_decimals=0, icon="mdi:speedometer"),
             cv.Optional(CONF_LINK_STATUS): text_sensor.text_sensor_schema(),
         }
     )

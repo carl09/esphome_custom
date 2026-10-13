@@ -5,6 +5,7 @@
 #include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/core/component.h"
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -28,6 +29,13 @@ class CobiBikeComponent final : public PollingComponent, public ble_client::BLEC
   void set_hub_battery_level_sensor(sensor::Sensor *sensor) { this->hub_battery_level_sensor_ = sensor; }
   void set_hub_battery_state_sensor(text_sensor::TextSensor *sensor) { this->hub_battery_state_sensor_ = sensor; }
   void set_motor_power_on_time_raw_sensor(sensor::Sensor *sensor) { this->motor_power_on_time_raw_sensor_ = sensor; }
+  void set_odometer_sensor(sensor::Sensor *sensor) { this->odometer_sensor_ = sensor; }
+  void set_motor_range_sensor(sensor::Sensor *sensor) { this->motor_range_sensor_ = sensor; }
+  void set_battery_range_sensor(sensor::Sensor *sensor) { this->battery_range_sensor_ = sensor; }
+  void set_speed_sensor(sensor::Sensor *sensor) { this->speed_sensor_ = sensor; }
+  void set_cadence_sensor(sensor::Sensor *sensor) { this->cadence_sensor_ = sensor; }
+  void set_rider_power_sensor(sensor::Sensor *sensor) { this->rider_power_sensor_ = sensor; }
+  void set_assist_level_sensor(sensor::Sensor *sensor) { this->assist_level_sensor_ = sensor; }
   void set_link_status_sensor(text_sensor::TextSensor *sensor) { this->link_status_sensor_ = sensor; }
 
   void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
@@ -62,7 +70,16 @@ class CobiBikeComponent final : public PollingComponent, public ble_client::BLEC
   sensor::Sensor *hub_battery_level_sensor_{nullptr};
   text_sensor::TextSensor *hub_battery_state_sensor_{nullptr};
   sensor::Sensor *motor_power_on_time_raw_sensor_{nullptr};
+  sensor::Sensor *odometer_sensor_{nullptr};
+  sensor::Sensor *motor_range_sensor_{nullptr};
+  sensor::Sensor *battery_range_sensor_{nullptr};
+  sensor::Sensor *speed_sensor_{nullptr};
+  sensor::Sensor *cadence_sensor_{nullptr};
+  sensor::Sensor *rider_power_sensor_{nullptr};
+  sensor::Sensor *assist_level_sensor_{nullptr};
   text_sensor::TextSensor *link_status_sensor_{nullptr};
+  std::array<uint16_t, 16> unsupported_seen_{};
+  size_t unsupported_seen_count_{0};
 
   uint16_t c2p_handle_{0};
   uint16_t p2c_handle_{0};

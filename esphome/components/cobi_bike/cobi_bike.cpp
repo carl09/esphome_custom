@@ -363,7 +363,7 @@ void CobiBikeComponent::send_read_batch_() {
       this->parent() == nullptr)
     return;
 
-  std::array<uint8_t, 8> bus{};
+  std::array<uint8_t, 32> bus{};
   size_t length = 0;
   const auto append_read = [&bus, &length](uint8_t channel, uint8_t property) {
     bus[length++] = static_cast<uint8_t>(channel << 2);  // V2 Action.READ
@@ -379,6 +379,22 @@ void CobiBikeComponent::send_read_batch_() {
     append_read(3, 30);  // Hub.internalBatteryState (distinct from traction battery)
   if (this->motor_power_on_time_raw_sensor_ != nullptr)
     append_read(7, 29);  // Motor.powerOnTime
+
+  // Motor channel (7) values; the bike may only answer while it is awake/riding.
+  if (this->odometer_sensor_ != nullptr)
+    append_read(7, 8);  // Motor.distance (uint32 / 100)
+  if (this->motor_range_sensor_ != nullptr)
+    append_read(7, 11);  // Motor.range (uint16)
+  if (this->battery_range_sensor_ != nullptr)
+    append_read(7, 18);  // Motor.batteryRange (uint32 / 100)
+  if (this->speed_sensor_ != nullptr)
+    append_read(7, 6);  // Motor.speed (uint32 / 100)
+  if (this->cadence_sensor_ != nullptr)
+    append_read(7, 7);  // Motor.cadence (uint8)
+  if (this->rider_power_sensor_ != nullptr)
+    append_read(7, 9);  // Motor.userPower (uint32 / 100)
+  if (this->assist_level_sensor_ != nullptr)
+    append_read(7, 10);  // Motor.assistanceIndicator (uint8)
 
   if (length == 0)
     return;
@@ -467,6 +483,12 @@ size_t CobiBikeComponent::known_payload_length_(uint8_t action, uint8_t channel,
     return 2;  // Hub internal BatteryCondition
   if (channel == 7 && property == 29)
     return 4;  // uint32 Motor.powerOnTime
+  if (channel == 7 && (property == 6 || property == 8 || property == 9 || property == 18))
+    return 4;  // Decimal2: uint32 / 100 (speed, distance, userPower, batteryRange)
+  if (channel == 7 && (property == 7 || property == 10))
+    return 1;  // uint8 (cadence, assistanceIndicator)
+  if (channel == 7 && property == 11)
+    return 2;  // uint16 Motor.range
   return SIZE_MAX;
 }
 
@@ -479,9 +501,16 @@ void CobiBikeComponent::handle_bus_messages_(const uint8_t *data, size_t length)
     const uint8_t property = data[offset++];
     const size_t payload_length = this->known_payload_length_(action, channel, property);
     if (payload_length == SIZE_MAX || payload_length > length - offset) {
-      if (!this->unknown_message_logged_) {
-        ESP_LOGW(TAG, "Received an unsupported COBI bus message; ignoring the rest of this batch");
-        this->unknown_message_logged_ = true;
+      // Log each distinct (action, channel, property) once so unknown hub traffic can be identified.
+      const uint16_t key = static_cast<uint16_t>((action << 14) | (channel << 8) | property);
+      if (std::find(this->unsupported_seen_.begin(), this->unsupported_seen_.begin() + this->unsupported_seen_count_,
+                    key) == this->unsupported_seen_.begin() + this->unsupported_seen_count_ &&
+          this->unsupported_seen_count_ < this->unsupported_seen_.size()) {
+        this->unsupported_seen_[this->unsupported_seen_count_++] = key;
+        char hex[3 * 16 + 1];
+        format_hex_pretty_to(hex, sizeof(hex), data + offset, std::min<size_t>(length - offset, 16));
+        ESP_LOGI(TAG, "Unsupported COBI bus message action=%u channel=%u property=%u; %u byte(s) follow: %s",
+                 action, channel, property, static_cast<unsigned>(length - offset), hex);
       }
       return;
     }
@@ -511,8 +540,13 @@ void CobiBikeComponent::handle_bus_message_(uint8_t action, uint8_t channel, uin
   }
 
   if (channel == 5 && property == 6 && payload_length == 2) {
-    if (payload[0] <= 100 && this->traction_battery_level_sensor_ != nullptr)
-      this->traction_battery_level_sensor_->publish_state(payload[0]);
+    // State UNKNOWN means the hub has no reading (e.g. bike just woke); publish NAN rather than a false 0 %.
+    if (this->traction_battery_level_sensor_ != nullptr) {
+      if (payload[1] == 0)
+        this->traction_battery_level_sensor_->publish_state(NAN);
+      else if (payload[0] <= 100)
+        this->traction_battery_level_sensor_->publish_state(payload[0]);
+    }
     if (this->traction_battery_state_sensor_ != nullptr)
       this->traction_battery_state_sensor_->publish_state(this->battery_state_name_(payload[1]));
     return;
@@ -535,8 +569,12 @@ void CobiBikeComponent::handle_bus_message_(uint8_t action, uint8_t channel, uin
   }
 
   if (channel == 3 && property == 30 && payload_length == 2) {
-    if (payload[0] <= 100 && this->hub_battery_level_sensor_ != nullptr)
-      this->hub_battery_level_sensor_->publish_state(payload[0]);
+    if (this->hub_battery_level_sensor_ != nullptr) {
+      if (payload[1] == 0)
+        this->hub_battery_level_sensor_->publish_state(NAN);
+      else if (payload[0] <= 100)
+        this->hub_battery_level_sensor_->publish_state(payload[0]);
+    }
     if (this->hub_battery_state_sensor_ != nullptr)
       this->hub_battery_state_sensor_->publish_state(this->battery_state_name_(payload[1]));
     return;
@@ -544,6 +582,28 @@ void CobiBikeComponent::handle_bus_message_(uint8_t action, uint8_t channel, uin
 
   if (channel == 7 && property == 29 && payload_length == 4 && this->motor_power_on_time_raw_sensor_ != nullptr)
     this->motor_power_on_time_raw_sensor_->publish_state(read_u32_be(payload));
+
+  if (channel == 7 && payload_length == 4) {
+    const float value = static_cast<float>(read_u32_be(payload)) / 100.0f;
+    sensor::Sensor *target = property == 8    ? this->odometer_sensor_
+                             : property == 18 ? this->battery_range_sensor_
+                             : property == 6  ? this->speed_sensor_
+                             : property == 9  ? this->rider_power_sensor_
+                                              : nullptr;
+    if (target != nullptr)
+      target->publish_state(value);
+    return;
+  }
+  if (channel == 7 && payload_length == 2 && property == 11 && this->motor_range_sensor_ != nullptr) {
+    this->motor_range_sensor_->publish_state(read_u16_be(payload));
+    return;
+  }
+  if (channel == 7 && payload_length == 1) {
+    if (property == 7 && this->cadence_sensor_ != nullptr)
+      this->cadence_sensor_->publish_state(payload[0]);
+    else if (property == 10 && this->assist_level_sensor_ != nullptr)
+      this->assist_level_sensor_->publish_state(payload[0]);
+  }
 }
 
 const char *CobiBikeComponent::battery_state_name_(uint8_t state) {
