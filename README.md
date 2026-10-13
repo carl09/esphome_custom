@@ -11,10 +11,57 @@ external_components:
   - source:
       type: git
       url: https://github.com/your-username/esphome_custom
-    components: [ st7789_i80, daikin_312, irremote_debug ]
+    components: [ st7789_i80, daikin_312, irremote_debug, cobi_bike ]
 ```
 
 ## Available Components
+
+### `cobi_bike` (initial, read-only telemetry)
+
+Connects an ESP32 ESPHome node to the **COBI AIR** BLE transport and requests non-active-ride values from the hub. It currently exposes traction-battery level/state and battery-health fields, the hub's own battery as a separately named value, and optional raw motor power-on time. The APK protocol contains `Motor.distance`, but its lifetime-odometer versus ride-distance meaning is not established, so this component deliberately does not label or publish it as an odometer yet.
+
+This initial version only sends COBI protocol `READ` messages. It does not send motor, light, alarm, reset, shutdown, or firmware-update commands. BLE notification subscription and AIR transport-counter synchronization are setup/recovery writes required by the transport. Pairing is opt-in with `pair: true`.
+
+**Requirements and limitations:** ESP32; ESPHome's `esp32_ble_tracker` and `ble_client`; COBI AIR hub path (COBI Pro is not implemented yet). The COBI Air service UUID/handle map was only partially captured at runtime, and independent ESP32 access has not been tested. Start with the component disabled or away from the bike if a connection might interfere with the official app; do not run it against the bike until you have reviewed the behavior and configuration.
+
+```yaml
+esp32_ble_tracker:
+
+ble_client:
+  - mac_address: "AA:BB:CC:DD:EE:FF"  # COBI hub address
+    id: cobi_hub
+    auto_connect: true
+
+cobi_bike:
+  id: cobi
+  ble_client_id: cobi_hub
+  update_interval: 5min
+  # Optional: request BLE bonding. Leave false unless you want this ESP32
+  # to create its own bond with the hub.
+  pair: false
+  traction_battery_level:
+    name: "E-bike traction battery"
+  traction_battery_state:
+    name: "E-bike traction battery state"
+  battery_health_soh:
+    name: "E-bike battery state of health"
+  battery_voltage_raw:
+    name: "E-bike battery voltage (raw)"
+  battery_current_raw:
+    name: "E-bike battery current (raw)"
+  battery_capacity_raw:
+    name: "E-bike battery capacity (raw)"
+  hub_battery_level:
+    name: "COBI hub battery"  # Not the e-bike traction battery
+  hub_battery_state:
+    name: "COBI hub battery state"
+  motor_power_on_time_raw:
+    name: "Motor power-on time (raw)"
+  link_status:
+    name: "COBI BLE link status"
+```
+
+The health tuple and power-on-time field are based on static APK protocol definitions and still need runtime verification. Their raw units are not guessed. Only traction `Battery.state` has been verified against the live capture. ESPHome BLE uses significant RAM, and a GATT connection may compete with the phone app for the hub connection.
 
 ### `daikin_312`
 

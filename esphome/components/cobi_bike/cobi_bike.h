@@ -1,0 +1,82 @@
+#pragma once
+
+#include "esphome/components/ble_client/ble_client.h"
+#include "esphome/components/sensor/sensor.h"
+#include "esphome/components/text_sensor/text_sensor.h"
+#include "esphome/core/component.h"
+
+#include <cstdint>
+#include <vector>
+
+namespace esphome::cobi_bike {
+
+class CobiBikeComponent final : public PollingComponent, public ble_client::BLEClientNode {
+ public:
+  void setup() override;
+  void dump_config() override;
+  void update() override;
+
+  void set_pairing(bool enabled) { this->pairing_enabled_ = enabled; }
+  void set_traction_battery_level_sensor(sensor::Sensor *sensor) { this->traction_battery_level_sensor_ = sensor; }
+  void set_traction_battery_state_sensor(text_sensor::TextSensor *sensor) { this->traction_battery_state_sensor_ = sensor; }
+  void set_battery_health_soh_sensor(sensor::Sensor *sensor) { this->battery_health_soh_sensor_ = sensor; }
+  void set_battery_voltage_raw_sensor(sensor::Sensor *sensor) { this->battery_voltage_raw_sensor_ = sensor; }
+  void set_battery_current_raw_sensor(sensor::Sensor *sensor) { this->battery_current_raw_sensor_ = sensor; }
+  void set_battery_capacity_raw_sensor(sensor::Sensor *sensor) { this->battery_capacity_raw_sensor_ = sensor; }
+  void set_hub_battery_level_sensor(sensor::Sensor *sensor) { this->hub_battery_level_sensor_ = sensor; }
+  void set_hub_battery_state_sensor(text_sensor::TextSensor *sensor) { this->hub_battery_state_sensor_ = sensor; }
+  void set_motor_power_on_time_raw_sensor(sensor::Sensor *sensor) { this->motor_power_on_time_raw_sensor_ = sensor; }
+  void set_link_status_sensor(text_sensor::TextSensor *sensor) { this->link_status_sensor_ = sensor; }
+
+  void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
+                          esp_ble_gattc_cb_param_t *param) override;
+  void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) override;
+
+ protected:
+  void set_link_status_(const char *status);
+  void reset_session_();
+  void discover_transport_();
+  void maybe_initialize_transport_();
+  void write_transport_counter_(uint8_t value);
+  void send_read_batch_();
+  void handle_transport_value_(const uint8_t *data, size_t length);
+  void handle_packet_(uint8_t type, const uint8_t *data, size_t length);
+  void handle_bus_messages_(const uint8_t *data, size_t length);
+  void handle_bus_message_(uint8_t action, uint8_t channel, uint8_t property, const uint8_t *payload,
+                           size_t payload_length);
+  size_t known_payload_length_(uint8_t action, uint8_t channel, uint8_t property) const;
+  static const char *battery_state_name_(uint8_t state);
+
+  sensor::Sensor *traction_battery_level_sensor_{nullptr};
+  text_sensor::TextSensor *traction_battery_state_sensor_{nullptr};
+  sensor::Sensor *battery_health_soh_sensor_{nullptr};
+  sensor::Sensor *battery_voltage_raw_sensor_{nullptr};
+  sensor::Sensor *battery_current_raw_sensor_{nullptr};
+  sensor::Sensor *battery_capacity_raw_sensor_{nullptr};
+  sensor::Sensor *hub_battery_level_sensor_{nullptr};
+  text_sensor::TextSensor *hub_battery_state_sensor_{nullptr};
+  sensor::Sensor *motor_power_on_time_raw_sensor_{nullptr};
+  text_sensor::TextSensor *link_status_sensor_{nullptr};
+
+  uint16_t c2p_handle_{0};
+  uint16_t p2c_handle_{0};
+  uint16_t counter_handle_{0};
+  uint8_t send_counter_{0};
+  uint8_t expected_receive_counter_{0};
+  std::vector<uint8_t> fragment_buffer_;
+
+  bool pairing_enabled_{false};
+  bool secure_link_ready_{true};
+  bool services_discovered_{false};
+  bool transport_initialization_started_{false};
+  bool p2c_registration_pending_{false};
+  bool p2c_notifications_ready_{false};
+  bool counter_registration_pending_{false};
+  bool counter_notifications_ready_{true};
+  bool counter_sync_pending_{false};
+  bool counter_sync_ready_{true};
+  bool session_ready_{false};
+  bool unknown_message_logged_{false};
+};
+
+}  // namespace esphome::cobi_bike
