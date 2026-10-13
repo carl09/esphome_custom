@@ -26,6 +26,8 @@ class CobiBleProbe final : public esp32_ble_tracker::ESPBTClient, public Compone
   void ble_before_disabled_event_handler() override;
 
   void set_target_address(uint64_t address);
+  void set_retry_interval(uint32_t ms) { this->retry_interval_ms_ = ms; }
+  void set_max_attempts(uint32_t n) { this->max_attempts_ = n; }
 
  protected:
   static constexpr uint16_t NO_CONN_ID = 0xFFFF;
@@ -41,6 +43,15 @@ class CobiBleProbe final : public esp32_ble_tracker::ESPBTClient, public Compone
   uint16_t conn_id_{NO_CONN_ID};
   uint16_t discovered_service_count_{0};
   uint32_t disconnecting_started_ms_{0};
+
+  uint32_t retry_interval_ms_{30000};
+  uint32_t max_attempts_{0};  // 0 = unlimited
+  uint32_t attempts_{0};
+  uint32_t attempt_started_ms_{0};
+  uint32_t attempt_finished_ms_{0};
+  uint32_t last_adv_log_ms_{0};
+  uint32_t adv_count_{0};
+  uint8_t last_adv_hash_{0};
 
   bool registration_requested_{false};
   bool attempt_started_{false};

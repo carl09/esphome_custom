@@ -25,7 +25,7 @@ void CobiBleProbe::setup() {
     this->mark_failed();
     return;
   }
-  ESP_LOGI(TAG, "Raw Bluedroid probe ready: one direct connection attempt, service discovery only, no pairing or writes");
+  ESP_LOGI(TAG, "Raw Bluedroid probe ready: direct connection attempts (retried), service discovery only, no pairing or writes");
 }
 
 void CobiBleProbe::dump_config() {
@@ -36,7 +36,8 @@ void CobiBleProbe::dump_config() {
   format_mac_addr_upper(address, address_str);
   ESP_LOGCONFIG(TAG, "Raw Bluedroid BLE probe:");
   ESP_LOGCONFIG(TAG, "  Target: %s", address_str);
-  ESP_LOGCONFIG(TAG, "  Connect attempts per boot: 1");
+  ESP_LOGCONFIG(TAG, "  Retry interval: %u ms; max attempts: %u (0 = unlimited)", (unsigned) this->retry_interval_ms_,
+                (unsigned) this->max_attempts_);
   ESP_LOGCONFIG(TAG, "  Pairing: disabled; GATT writes: disabled");
 }
 
@@ -68,8 +69,33 @@ void CobiBleProbe::loop() {
 }
 
 bool CobiBleProbe::parse_device(const esp32_ble_tracker::ESPBTDevice &device) {
-  if (this->attempt_started_ || this->state() != esp32_ble_tracker::ClientState::IDLE ||
-      this->gattc_if_ == ESP_GATT_IF_NONE || device.address_uint64() != this->target_address_)
+  if (device.address_uint64() != this->target_address_)
+    return false;
+
+  // Dump the raw advertisement (+ scan response) so connectability/flags/UUIDs/manufacturer data can be inspected.
+  // Logged when the payload changes or every 10 s.
+  this->adv_count_++;
+  const auto &sr = device.get_scan_result();
+  const size_t len = static_cast<size_t>(sr.adv_data_len) + sr.scan_rsp_len;
+  uint8_t hash = 0;
+  for (size_t i = 0; i < len; i++)
+    hash = static_cast<uint8_t>(hash * 31 + sr.ble_adv[i]);
+  if (hash != this->last_adv_hash_ || millis() - this->last_adv_log_ms_ >= 10000) {
+    this->last_adv_hash_ = hash;
+    this->last_adv_log_ms_ = millis();
+    char hex[(ESP_BLE_ADV_DATA_LEN_MAX + ESP_BLE_SCAN_RSP_DATA_LEN_MAX) * 2 + 1];
+    format_hex_to(hex, sizeof(hex), sr.ble_adv, len);
+    ESP_LOGI(TAG, "ADV #%u rssi=%d addr_type=%u adv_len=%u scan_rsp_len=%u flags=%s name='%s' raw=%s",
+             (unsigned) this->adv_count_, device.get_rssi(), (unsigned) device.get_address_type(),
+             (unsigned) sr.adv_data_len, (unsigned) sr.scan_rsp_len,
+             device.get_ad_flag().has_value() ? "present" : "absent", device.get_name().c_str(), hex);
+  }
+
+  if (this->state() != esp32_ble_tracker::ClientState::IDLE || this->gattc_if_ == ESP_GATT_IF_NONE)
+    return false;
+  if (this->max_attempts_ != 0 && this->attempts_ >= this->max_attempts_)
+    return false;
+  if (this->attempts_ != 0 && millis() - this->attempt_finished_ms_ < this->retry_interval_ms_)
     return false;
 
   std::memcpy(this->remote_bda_, device.address(), sizeof(this->remote_bda_));
@@ -78,17 +104,17 @@ bool CobiBleProbe::parse_device(const esp32_ble_tracker::ESPBTDevice &device) {
 
   char address_str[MAC_ADDRESS_PRETTY_BUFFER_SIZE];
   format_mac_addr_upper(this->remote_bda_, address_str);
-  ESP_LOGI(TAG, "Found target %s (RSSI=%d, addr_type=%u); scheduling raw direct GATT open", address_str,
-           device.get_rssi(), static_cast<unsigned>(this->remote_addr_type_));
+  ESP_LOGI(TAG, "Found target %s (RSSI=%d, addr_type=%u); scheduling raw direct GATT open (attempt %u)", address_str,
+           device.get_rssi(), static_cast<unsigned>(this->remote_addr_type_), (unsigned) (this->attempts_ + 1));
   return true;
 }
 
 void CobiBleProbe::connect() {
-  if (this->attempt_started_ || this->state() != esp32_ble_tracker::ClientState::DISCOVERED ||
-      this->gattc_if_ == ESP_GATT_IF_NONE)
+  if (this->state() != esp32_ble_tracker::ClientState::DISCOVERED || this->gattc_if_ == ESP_GATT_IF_NONE)
     return;
 
-  this->attempt_started_ = true;
+  this->attempts_++;
+  this->attempt_started_ms_ = millis();
   this->conn_id_ = NO_CONN_ID;
   this->discovered_service_count_ = 0;
   this->gatt_open_ = false;
@@ -114,7 +140,6 @@ void CobiBleProbe::ble_before_disabled_event_handler() {
   this->gattc_if_ = ESP_GATT_IF_NONE;
   this->conn_id_ = NO_CONN_ID;
   this->registration_requested_ = false;
-  this->attempt_started_ = false;
   this->gatt_open_ = false;
   this->service_search_started_ = false;
   this->close_requested_ = false;
@@ -244,6 +269,9 @@ void CobiBleProbe::close_connection_(const char *reason) {
 }
 
 void CobiBleProbe::finish_connection_() {
+  this->attempt_finished_ms_ = millis();
+  ESP_LOGI(TAG, "Attempt %u ended %u ms after open was called", (unsigned) this->attempts_,
+           (unsigned) (this->attempt_finished_ms_ - this->attempt_started_ms_));
   this->conn_id_ = NO_CONN_ID;
   this->gatt_open_ = false;
   this->service_search_started_ = false;
