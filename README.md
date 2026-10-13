@@ -18,7 +18,7 @@ external_components:
 
 ### `cobi_bike` (COBI AIR telemetry; optional pairing and hub wake)
 
-Connects an ESP32 ESPHome node to the **COBI AIR** BLE transport (hub advertising as `Bosch Sm…`) and reads values from the hub. It exposes the traction-battery level/state, the hub's own battery (separately named, not the e-bike battery), and optional motor values: odometer, range, battery range, speed, cadence, rider power and assist level. Battery-health fields and motor power-on time are also available but still unverified (see below).
+Connects an ESP32 ESPHome node to the **COBI AIR** BLE transport (hub advertising as `Bosch Sm…`) and reads values from the hub. It exposes the traction-battery level/state, the hub's own battery (separately named, not the e-bike battery), and optional motor values: odometer, range, battery range, speed, cadence, rider power and assist level. Battery-health fields are available but did not answer on the tested battery (see below).
 
 Telemetry requests use COBI protocol `READ` messages, sent at most four per BLE write (the compact AIR packet header limit). The component does not send motor, light, alarm, reset, shutdown, or firmware-update commands. BLE notification subscription and AIR transport-counter synchronization are setup/recovery writes required by the transport. Hub wake is separately opt-in (`wake_hub: true`) and only sends the lifecycle `WRITE` `Hub.rideLifecycleState = NOT_RIDABLE` after the hub reports `AWAY` in app mode, matching the app's wake path; this is a state-changing request, not a bike-control command.
 
@@ -28,16 +28,17 @@ The hub only accepts a connection from a device it hasn't bonded with **while it
 
 1. Close the COBI app and put the hub into pairing mode (see COBI/Bosch hub documentation; the window is short, roughly 10-15 s).
 2. Flash with `pair: true` and `ble_client` `auto_connect: true`, so the ESP32 connects as soon as the pairing advertisement is seen. It bonds with Just Works (the ESP32 reports IO capability `none`); the bond is stored in the ESP32's NVS flash.
-3. After a successful bond the ESP32 reconnects on its own without pairing mode (verified by rebooting it). Erasing the ESP32's flash, or using a different ESP32, means pairing again. `pair` can be set back to `false` afterwards.
+3. After a successful bond the ESP32 reconnects on its own without pairing mode (verified by rebooting it with `pair: true`). Erasing the ESP32's flash, or using a different ESP32, means pairing again. `pair: false` means "do not create a new bond": since the fix of 2026-10-14 the component still re-encrypts the link with the stored bond whenever the hub is bonded (earlier builds did not, and a bonded reconnect then stalled at `COBI AIR transport found; enabling telemetry notifications`; if you run an old build, keep `pair: true`).
 4. Re-pairing may disturb the phone's bond; if the COBI app stops connecting, re-pair the phone.
 
 #### Requirements and limitations
 
-ESP32 only; ESPHome's `esp32_ble_tracker` and `ble_client`; COBI AIR hub path (COBI Pro is not implemented). The hub may allow only one connection at a time, so the ESP32 and the phone app may compete for it; this has not been tested.
+ESP32 only; ESPHome's `esp32_ble_tracker` and `ble_client`; COBI AIR hub path (COBI Pro is not implemented). The hub may allow only one connection at a time, so the ESP32 and the phone app may compete for it; this has not been tested. Wi-Fi/API/MQTT were enabled alongside BLE on the test node.
 
 - **Verified on a live hub:** pairing, bonded reconnect, and traction `Battery.state` / hub battery values (the traction level matched the app during the HCI capture). When the hub/bike turns off it reports level 0 / `UNKNOWN`; the component publishes `unknown` (not 0 %) for the level in that case.
-- **Seen on a live bike (idle, hub awake):** odometer, motor range, assist level, motor power-on time, wheel circumference, next-service distance, drive mode, and the motor/battery/hub type and firmware strings (see the protocol reference in the investigation docs). `battery_range`, speed, cadence and rider power did not answer while idle; `battery_health_soh` and the raw voltage/current/capacity did not answer at all on the tested battery.
-- **Not verified (older notes):** `odometer` (`Motor.distance`, uint32 / 100; unit assumed km), `motor_range`, `battery_range`, `speed`, `cadence`, `rider_power`, `assist_level`, battery health and raw voltage/current/capacity, and `motor_power_on_time_raw`. These come from static APK protocol definitions. The hub has not answered the health and power-on-time READs so far, and speed/cadence/power are only meaningful while riding.
+- **Seen on a live bike (idle, hub awake, Bosch Smart System BDU450 motor / BBP200 battery / Kiox):** odometer (9007.55 km on the test bike, unit assumed km), motor range, assist level, motor power-on time (unit unknown), wheel circumference, next-service distance (meaning unclear), drive mode / supported drive modes (raw, meaning unknown), the motor/battery/hub type and firmware strings, the display type, and the frame accelerometer (pushed ~3 times a second; throttle it). These came from a `discovery_scan` (decoded values are listed in the protocol reference in the project docs); the latest component build with the READ-queue fix was compiled but not yet confirmed on the device when this was written.
+- **Did not answer while idle:** `battery_range`, speed, cadence and rider power (probably riding-only; not yet tested while riding). `battery_health_soh` and the raw voltage/current/capacity did not answer at all on the tested battery, so they will probably stay `unknown`.
+- If a session cannot be set up (encryption, notification registration, counter write, or a 30 s timeout) the component drops the link so `ble_client` reconnects; look for `COBI AIR session failed (...)` or `session setup timed out` in the log.
 - Multi-byte values on the COBI bus are little-endian (the app decodes them from a little-endian buffer); the component reads them that way.
 - Unknown bus messages are logged once per distinct (action, channel, property) at INFO (`Unsupported COBI bus message ...`); this helps identify unmapped hub traffic.
 
@@ -53,8 +54,8 @@ cobi_bike:
   id: cobi
   ble_client_id: cobi_hub
   update_interval: 5min
-  # Needed the first time, with the hub in pairing mode (see above). The bond
-  # is persisted, so this can be false afterwards.
+  # true creates a new bond (hub in pairing mode, see above). The bond is persisted; with
+  # false a bonded hub is still re-encrypted on connect (older builds needed true).
   pair: false
   # Optional diagnostic: once the session is ready, send ~90 read-only READs one at a time and log every raw
   # response as 'SCAN tx' / 'SCAN rx' (INFO) so unmapped values can be decoded. Turn off afterwards.

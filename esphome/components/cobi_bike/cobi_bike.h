@@ -60,6 +60,8 @@ class CobiBikeComponent final : public PollingComponent, public ble_client::BLEC
  protected:
   void set_link_status_(const char *status);
   void reset_session_();
+  bool is_bonded_(const uint8_t *remote_bda) const;
+  void fail_session_(const char *reason);
   void discover_transport_();
   void maybe_initialize_transport_();
   void write_transport_counter_(uint8_t value);
@@ -142,6 +144,13 @@ class CobiBikeComponent final : public PollingComponent, public ble_client::BLEC
   std::vector<std::array<uint8_t, 2>> pending_reads_;
   uint32_t last_read_write_ms_{0};
   bool static_info_requested_{false};
+  // Reconnect robustness: encryption is requested on every connection to a bonded hub (not only with `pair: true`),
+  // and a session that does not become ready in time is dropped so ESPHome's auto-connect can retry.
+  bool connected_{false};
+  bool encryption_requested_{false};
+  bool force_encryption_{false};
+  bool session_failed_{false};
+  uint32_t connected_at_ms_{0};
   bool discovery_scan_enabled_{false};
   bool discovery_scan_started_{false};
   size_t discovery_scan_index_{0};

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <vector>
 
 #ifdef USE_ESP32
 #include <esp_gattc_api.h>
@@ -27,6 +28,7 @@ static constexpr uint8_t APPLICATION_MODE_APP = 0;
 static constexpr uint8_t RIDE_LIFECYCLE_AWAY = 0;
 static constexpr uint8_t RIDE_LIFECYCLE_NOT_RIDABLE = 1;
 static constexpr uint32_t LIFECYCLE_READ_RETRY_INTERVAL_MS = 2000;
+static constexpr uint32_t SESSION_SETUP_TIMEOUT_MS = 30000;
 
 // COBI bus property values are decoded by the app from a LITTLE_ENDIAN ByteBuffer (RawByteConverter.decodeV2), so
 // multi-byte property payloads are little-endian.
@@ -192,6 +194,16 @@ void CobiBikeComponent::update() {
 }
 
 void CobiBikeComponent::loop() {
+  if (this->connected_ && !this->session_ready_ && !this->session_failed_ &&
+      millis() - this->connected_at_ms_ > SESSION_SETUP_TIMEOUT_MS) {
+    ESP_LOGW(TAG,
+             "COBI AIR session setup timed out: secure=%d discovered=%d transport_started=%d p2c_notify=%d "
+             "counter_notify=%d counter_sync=%d",
+             this->secure_link_ready_, this->services_discovered_, this->transport_initialization_started_,
+             this->p2c_notifications_ready_, this->counter_notifications_ready_, this->counter_sync_ready_);
+    this->fail_session_("setup timed out");
+  }
+
   this->drain_read_queue_();
 
   if (this->discovery_scan_enabled_ && this->session_ready_ && this->c2p_handle_ != 0 && this->parent() != nullptr &&
@@ -230,12 +242,25 @@ void CobiBikeComponent::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt
   switch (event) {
     case ESP_GATTC_CONNECT_EVT: {
       this->reset_session_();
-      this->secure_link_ready_ = !this->pairing_enabled_;
-      this->set_link_status_(this->pairing_enabled_ ? "Connected; requesting BLE pairing" : "Connected; discovering COBI AIR");
-      if (this->pairing_enabled_ && this->parent() != nullptr) {
+      this->connected_ = true;
+      this->session_failed_ = false;
+      this->connected_at_ms_ = millis();
+      // A bonded hub requires the link to be re-encrypted by us (the phone does this right after connecting).
+      // Without it, the notification/counter writes fail and the session never becomes ready, so request
+      // encryption whenever a bond exists, not only when `pair: true` asks for a new bond.
+      const bool bonded = this->is_bonded_(param->connect.remote_bda);
+      this->encryption_requested_ = this->pairing_enabled_ || bonded || this->force_encryption_;
+      this->secure_link_ready_ = !this->encryption_requested_;
+      ESP_LOGI(TAG, "Connected (bonded=%s, pair option=%s): %s", bonded ? "yes" : "no",
+               this->pairing_enabled_ ? "yes" : "no",
+               this->encryption_requested_ ? "requesting link encryption" : "continuing without encryption");
+      this->set_link_status_(this->encryption_requested_ ? (bonded ? "Connected; encrypting link with stored bond"
+                                                                    : "Connected; requesting BLE pairing")
+                                                          : "Connected; discovering COBI AIR");
+      if (this->encryption_requested_ && this->parent() != nullptr) {
         const esp_err_t err = this->parent()->pair();
         if (err != ESP_OK)
-          ESP_LOGW(TAG, "BLE pairing request returned error %d", err);
+          ESP_LOGW(TAG, "BLE encryption request returned error %d", err);
       }
       break;
     }
@@ -253,8 +278,10 @@ void CobiBikeComponent::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt
       if (handle == this->p2c_handle_) {
         this->p2c_registration_pending_ = false;
         this->p2c_notifications_ready_ = succeeded;
-        if (!succeeded)
+        if (!succeeded) {
           ESP_LOGW(TAG, "Could not subscribe to COBI AIR P2C notifications (status=%d)", param->reg_for_notify.status);
+          this->fail_session_("P2C notification registration failed");
+        }
       } else if (handle == this->counter_handle_) {
         this->counter_registration_pending_ = false;
         // Counter-mismatch indications are recovery support, not required for the first read.
@@ -269,8 +296,13 @@ void CobiBikeComponent::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt
       if (param->write.handle == this->counter_handle_ && this->counter_sync_pending_) {
         this->counter_sync_pending_ = false;
         this->counter_sync_ready_ = param->write.status == ESP_GATT_OK;
-        if (!this->counter_sync_ready_)
+        if (!this->counter_sync_ready_) {
           ESP_LOGW(TAG, "Could not initialize COBI AIR transport counter (status=%d)", param->write.status);
+          // 0x05 insufficient authentication / 0x0f insufficient encryption: encrypt on the next connection.
+          if (param->write.status == ESP_GATT_INSUF_AUTHENTICATION || param->write.status == ESP_GATT_INSUF_ENCRYPTION)
+            this->force_encryption_ = true;
+          this->fail_session_("transport counter write failed");
+        }
         this->maybe_initialize_transport_();
       }
       break;
@@ -295,6 +327,8 @@ void CobiBikeComponent::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt
       break;
     case ESP_GATTC_DISCONNECT_EVT:
     case ESP_GATTC_CLOSE_EVT:
+      ESP_LOGI(TAG, "COBI link closed (event %d); waiting for the hub to advertise again", static_cast<int>(event));
+      this->connected_ = false;
       this->reset_session_();
       this->set_link_status_("Disconnected");
       break;
@@ -317,7 +351,36 @@ void CobiBikeComponent::gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_
     this->node_state = esp32_ble_tracker::ClientState::ESTABLISHED;
     this->set_link_status_("BLE pairing failed");
     ESP_LOGW(TAG, "BLE authentication failed (reason=%d)", param->ble_security.auth_cmpl.fail_reason);
+    this->fail_session_("BLE authentication failed");
   }
+}
+
+bool CobiBikeComponent::is_bonded_(const uint8_t *remote_bda) const {
+  if (remote_bda == nullptr)
+    return false;
+  int count = esp_ble_get_bond_device_num();
+  if (count <= 0)
+    return false;
+  std::vector<esp_ble_bond_dev_t> devices(static_cast<size_t>(count));
+  if (esp_ble_get_bond_device_list(&count, devices.data()) != ESP_OK)
+    return false;
+  for (int i = 0; i < count; i++) {
+    if (std::memcmp(devices[static_cast<size_t>(i)].bd_addr, remote_bda, ESP_BD_ADDR_LEN) == 0)
+      return true;
+  }
+  return false;
+}
+
+// Drop the link when session setup cannot complete so ESPHome's auto-connect starts a fresh attempt instead of
+// leaving the GATT connection open with a stuck telemetry session.
+void CobiBikeComponent::fail_session_(const char *reason) {
+  if (this->session_failed_)
+    return;
+  this->session_failed_ = true;
+  ESP_LOGW(TAG, "COBI AIR session failed (%s); disconnecting so the client can reconnect", reason);
+  this->set_link_status_("COBI AIR setup failed; reconnecting");
+  if (this->parent() != nullptr)
+    this->parent()->disconnect();
 }
 
 void CobiBikeComponent::discover_transport_() {
@@ -349,6 +412,7 @@ void CobiBikeComponent::discover_transport_() {
     this->p2c_registration_pending_ = false;
     this->set_link_status_("Could not subscribe to COBI notifications");
     ESP_LOGW(TAG, "P2C notification registration failed (error=%d)", err);
+    this->fail_session_("P2C notification registration error");
     return;
   }
 
@@ -383,6 +447,7 @@ void CobiBikeComponent::write_transport_counter_(uint8_t value) {
     this->counter_sync_ready_ = false;
     this->set_link_status_("COBI AIR counter synchronization failed");
     ESP_LOGW(TAG, "COBI AIR counter write failed (error=%d)", err);
+    this->fail_session_("transport counter write error");
   }
 }
 
