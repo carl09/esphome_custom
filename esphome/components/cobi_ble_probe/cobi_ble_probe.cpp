@@ -91,6 +91,20 @@ bool CobiBleProbe::parse_device(const esp32_ble_tracker::ESPBTDevice &device) {
              device.get_ad_flag().has_value() ? "present" : "absent", device.get_name().c_str(), hex);
   }
 
+  // COBI AIR advertisement (Bosch company id 0x02A6), layout from the app's AirAdvertisementInformationFactory:
+  // [0..1] component id, [2] version, [3] component type, [4] data format, [5] device mode (1=bootloader, 2=app),
+  // [6] flags (bit0 = pairing mode, bit1 = bonding issue), [8..20] serial number.
+  static uint8_t last_flags = 0xFF;
+  for (const auto &md : device.get_manufacturer_datas()) {
+    if (md.uuid.get_uuid().len != ESP_UUID_LEN_16 || md.uuid.get_uuid().uuid.uuid16 != 0x02A6 || md.data.size() < 7)
+      continue;
+    if (md.data[6] != last_flags) {
+      last_flags = md.data[6];
+      ESP_LOGI(TAG, "COBI adv: mode=%u flags=0x%02X pairing_mode=%s bonding_issue=%s data_format=%u", md.data[5],
+               md.data[6], (md.data[6] & 1) ? "YES" : "no", (md.data[6] & 2) ? "YES" : "no", md.data[4]);
+    }
+  }
+
   if (this->state() != esp32_ble_tracker::ClientState::IDLE || this->gattc_if_ == ESP_GATT_IF_NONE)
     return false;
   if (this->max_attempts_ != 0 && this->attempts_ >= this->max_attempts_)
