@@ -1,4 +1,4 @@
-"""Read-only COBI Air telemetry over the COBI BLE transport."""
+"""COBI AIR telemetry with opt-in BLE bonding and lifecycle wake."""
 
 import esphome.codegen as cg
 import esphome.config_validation as cv
@@ -15,6 +15,7 @@ CobiBikeComponent = cobi_bike_ns.class_(
 )
 
 CONF_PAIR = "pair"
+CONF_WAKE_HUB = "wake_hub"
 CONF_TRACTION_BATTERY_LEVEL = "traction_battery_level"
 CONF_TRACTION_BATTERY_STATE = "traction_battery_state"
 CONF_BATTERY_HEALTH_SOH = "battery_health_soh"
@@ -52,6 +53,7 @@ CONFIG_SCHEMA = cv.All(
         {
             cv.GenerateID(): cv.declare_id(CobiBikeComponent),
             cv.Optional(CONF_PAIR, default=False): cv.boolean,
+            cv.Optional(CONF_WAKE_HUB, default=False): cv.boolean,
             cv.Optional(CONF_TRACTION_BATTERY_LEVEL): sensor.sensor_schema(
                 unit_of_measurement="%",
                 accuracy_decimals=0,
@@ -90,6 +92,7 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     cg.add(var.set_pairing(config[CONF_PAIR]))
+    cg.add(var.set_wake_hub(config[CONF_WAKE_HUB]))
     await ble_client.register_ble_node(var, config)
 
     for key, setter in SENSOR_KEYS.items():

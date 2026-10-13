@@ -15,8 +15,10 @@ class CobiBikeComponent final : public PollingComponent, public ble_client::BLEC
   void setup() override;
   void dump_config() override;
   void update() override;
+  void loop() override;
 
   void set_pairing(bool enabled) { this->pairing_enabled_ = enabled; }
+  void set_wake_hub(bool enabled) { this->wake_hub_enabled_ = enabled; }
   void set_traction_battery_level_sensor(sensor::Sensor *sensor) { this->traction_battery_level_sensor_ = sensor; }
   void set_traction_battery_state_sensor(text_sensor::TextSensor *sensor) { this->traction_battery_state_sensor_ = sensor; }
   void set_battery_health_soh_sensor(sensor::Sensor *sensor) { this->battery_health_soh_sensor_ = sensor; }
@@ -38,6 +40,10 @@ class CobiBikeComponent final : public PollingComponent, public ble_client::BLEC
   void discover_transport_();
   void maybe_initialize_transport_();
   void write_transport_counter_(uint8_t value);
+  void request_hub_wake_state_();
+  void maybe_wake_hub_();
+  void handle_lifecycle_state_(uint8_t state);
+  bool send_bus_payload_(const uint8_t *payload, size_t length, const char *description);
   void send_read_batch_();
   void handle_transport_value_(const uint8_t *data, size_t length);
   void handle_packet_(uint8_t type, const uint8_t *data, size_t length);
@@ -66,6 +72,13 @@ class CobiBikeComponent final : public PollingComponent, public ble_client::BLEC
   std::vector<uint8_t> fragment_buffer_;
 
   bool pairing_enabled_{false};
+  bool wake_hub_enabled_{false};
+  bool application_mode_known_{false};
+  bool application_mode_is_app_{false};
+  bool lifecycle_state_received_{false};
+  bool hub_awake_{false};
+  bool wake_write_sent_{false};
+  uint32_t last_lifecycle_state_read_ms_{0};
   bool secure_link_ready_{true};
   bool services_discovered_{false};
   bool transport_initialization_started_{false};

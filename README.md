@@ -16,11 +16,13 @@ external_components:
 
 ## Available Components
 
-### `cobi_bike` (initial, read-only telemetry)
+### `cobi_bike` (initial telemetry; optional pairing and hub wake)
 
 Connects an ESP32 ESPHome node to the **COBI AIR** BLE transport and requests non-active-ride values from the hub. It currently exposes traction-battery level/state and battery-health fields, the hub's own battery as a separately named value, and optional raw motor power-on time. The APK protocol contains `Motor.distance`, but its lifetime-odometer versus ride-distance meaning is not established, so this component deliberately does not label or publish it as an odometer yet.
 
-This initial version only sends COBI protocol `READ` messages. It does not send motor, light, alarm, reset, shutdown, or firmware-update commands. BLE notification subscription and AIR transport-counter synchronization are setup/recovery writes required by the transport. Pairing is opt-in with `pair: true`.
+Telemetry requests use COBI protocol `READ` messages. The component does not send motor, light, alarm, reset, shutdown, or firmware-update commands. BLE notification subscription and AIR transport-counter synchronization are setup/recovery writes required by the transport. BLE bonding is opt-in with `pair: true` and creates a separate bond for the ESP32.
+
+Hub wake is separately opt-in with `wake_hub: true`. After the BLE and COBI AIR transports are established, the component reads the hub application mode and ride-lifecycle state. Only if the hub reports `AWAY` in app mode, it sends the lifecycle `WRITE` `Hub.rideLifecycleState = NOT_RIDABLE`, matching the wake path found in the official app. This is a state-changing wake request, not a bike-control command. It only runs after GATT connection and service setup; it cannot resolve failures that occur before GATT connects. Both `pair` and `wake_hub` default to `false`.
 
 **Requirements and limitations:** ESP32; ESPHome's `esp32_ble_tracker` and `ble_client`; COBI AIR hub path (COBI Pro is not implemented yet). The COBI Air service UUID/handle map was only partially captured at runtime, and independent ESP32 access has not been tested. Start with the component disabled or away from the bike if a connection might interfere with the official app; do not run it against the bike until you have reviewed the behavior and configuration.
 
@@ -39,6 +41,9 @@ cobi_bike:
   # Optional: request BLE bonding. Leave false unless you want this ESP32
   # to create its own bond with the hub.
   pair: false
+  # Optional: send the app-style lifecycle wake WRITE if the hub reports AWAY.
+  # Runs only after the BLE/GATT and COBI AIR transports are established.
+  wake_hub: false
   traction_battery_level:
     name: "E-bike traction battery"
   traction_battery_state:
@@ -61,7 +66,7 @@ cobi_bike:
     name: "COBI BLE link status"
 ```
 
-The health tuple and power-on-time field are based on static APK protocol definitions and still need runtime verification. Their raw units are not guessed. Only traction `Battery.state` has been verified against the live capture. ESPHome BLE uses significant RAM, and a GATT connection may compete with the phone app for the hub connection.
+The health tuple and power-on-time field are based on static APK protocol definitions and still need runtime verification. Their raw units are not guessed. Only traction `Battery.state` has been verified against the live capture. ESPHome BLE uses significant RAM, and a GATT connection may compete with the phone app for the hub connection. To opt in to the app-like bond and lifecycle wake behavior, set both `pair: true` and `wake_hub: true`; these do not change the direct GATT connection attempt itself.
 
 ### `daikin_312`
 
