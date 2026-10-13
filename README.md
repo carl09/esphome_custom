@@ -37,6 +37,7 @@ ESP32 only; ESPHome's `esp32_ble_tracker` and `ble_client`; COBI AIR hub path (C
 
 - **Verified on a live hub:** pairing, bonded reconnect, and traction `Battery.state` / hub battery values (the traction level matched the app during the HCI capture). When the hub/bike turns off it reports level 0 / `UNKNOWN`; the component publishes `unknown` (not 0 %) for the level in that case.
 - **Not verified:** `odometer` (`Motor.distance`, uint32 / 100; unit assumed km), `motor_range`, `battery_range`, `speed`, `cadence`, `rider_power`, `assist_level`, battery health and raw voltage/current/capacity, and `motor_power_on_time_raw`. These come from static APK protocol definitions. The hub has not answered the health and power-on-time READs so far, and speed/cadence/power are only meaningful while riding.
+- Multi-byte values on the COBI bus are little-endian (the app decodes them from a little-endian buffer); the component reads them that way.
 - Unknown bus messages are logged once per distinct (action, channel, property) at INFO (`Unsupported COBI bus message ...`); this helps identify unmapped hub traffic.
 
 ```yaml

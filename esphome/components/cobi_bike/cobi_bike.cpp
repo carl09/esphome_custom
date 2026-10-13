@@ -28,6 +28,15 @@ static constexpr uint8_t RIDE_LIFECYCLE_AWAY = 0;
 static constexpr uint8_t RIDE_LIFECYCLE_NOT_RIDABLE = 1;
 static constexpr uint32_t LIFECYCLE_READ_RETRY_INTERVAL_MS = 2000;
 
+// COBI bus property values are decoded by the app from a LITTLE_ENDIAN ByteBuffer (RawByteConverter.decodeV2), so
+// multi-byte property payloads are little-endian.
+static uint16_t read_u16_le(const uint8_t *data) { return static_cast<uint16_t>(data[0] | (data[1] << 8)); }
+
+static uint32_t read_u32_le(const uint8_t *data) {
+  return static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8) |
+         (static_cast<uint32_t>(data[2]) << 16) | (static_cast<uint32_t>(data[3]) << 24);
+}
+
 static uint16_t read_u16_be(const uint8_t *data) {
   return (static_cast<uint16_t>(data[0]) << 8) | data[1];
 }
@@ -553,9 +562,9 @@ void CobiBikeComponent::handle_bus_message_(uint8_t action, uint8_t channel, uin
   }
 
   if (channel == 5 && property == 8 && payload_length == 7) {
-    const uint16_t voltage_raw = read_u16_be(payload);
-    const int16_t current_raw = static_cast<int16_t>(read_u16_be(payload + 2));
-    const uint16_t capacity_raw = read_u16_be(payload + 4);
+    const uint16_t voltage_raw = read_u16_le(payload);
+    const int16_t current_raw = static_cast<int16_t>(read_u16_le(payload + 2));
+    const uint16_t capacity_raw = read_u16_le(payload + 4);
     const uint8_t state_of_health = payload[6];
     if (this->battery_voltage_raw_sensor_ != nullptr)
       this->battery_voltage_raw_sensor_->publish_state(voltage_raw);
@@ -581,10 +590,10 @@ void CobiBikeComponent::handle_bus_message_(uint8_t action, uint8_t channel, uin
   }
 
   if (channel == 7 && property == 29 && payload_length == 4 && this->motor_power_on_time_raw_sensor_ != nullptr)
-    this->motor_power_on_time_raw_sensor_->publish_state(read_u32_be(payload));
+    this->motor_power_on_time_raw_sensor_->publish_state(read_u32_le(payload));
 
   if (channel == 7 && payload_length == 4) {
-    const float value = static_cast<float>(read_u32_be(payload)) / 100.0f;
+    const float value = static_cast<float>(read_u32_le(payload)) / 100.0f;
     sensor::Sensor *target = property == 8    ? this->odometer_sensor_
                              : property == 18 ? this->battery_range_sensor_
                              : property == 6  ? this->speed_sensor_
@@ -595,7 +604,7 @@ void CobiBikeComponent::handle_bus_message_(uint8_t action, uint8_t channel, uin
     return;
   }
   if (channel == 7 && payload_length == 2 && property == 11 && this->motor_range_sensor_ != nullptr) {
-    this->motor_range_sensor_->publish_state(read_u16_be(payload));
+    this->motor_range_sensor_->publish_state(read_u16_le(payload));
     return;
   }
   if (channel == 7 && payload_length == 1) {
