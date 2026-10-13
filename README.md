@@ -20,7 +20,7 @@ external_components:
 
 Connects an ESP32 ESPHome node to the **COBI AIR** BLE transport (hub advertising as `Bosch Sm…`) and reads values from the hub. It exposes the traction-battery level/state, the hub's own battery (separately named, not the e-bike battery), and optional motor values: odometer, range, battery range, speed, cadence, rider power and assist level. Battery-health fields and motor power-on time are also available but still unverified (see below).
 
-Telemetry requests use COBI protocol `READ` messages. The component does not send motor, light, alarm, reset, shutdown, or firmware-update commands. BLE notification subscription and AIR transport-counter synchronization are setup/recovery writes required by the transport. Hub wake is separately opt-in (`wake_hub: true`) and only sends the lifecycle `WRITE` `Hub.rideLifecycleState = NOT_RIDABLE` after the hub reports `AWAY` in app mode, matching the app's wake path; this is a state-changing request, not a bike-control command.
+Telemetry requests use COBI protocol `READ` messages, sent at most four per BLE write (the compact AIR packet header limit). The component does not send motor, light, alarm, reset, shutdown, or firmware-update commands. BLE notification subscription and AIR transport-counter synchronization are setup/recovery writes required by the transport. Hub wake is separately opt-in (`wake_hub: true`) and only sends the lifecycle `WRITE` `Hub.rideLifecycleState = NOT_RIDABLE` after the hub reports `AWAY` in app mode, matching the app's wake path; this is a state-changing request, not a bike-control command.
 
 #### Pairing (required the first time)
 
@@ -36,7 +36,8 @@ The hub only accepts a connection from a device it hasn't bonded with **while it
 ESP32 only; ESPHome's `esp32_ble_tracker` and `ble_client`; COBI AIR hub path (COBI Pro is not implemented). The hub may allow only one connection at a time, so the ESP32 and the phone app may compete for it; this has not been tested.
 
 - **Verified on a live hub:** pairing, bonded reconnect, and traction `Battery.state` / hub battery values (the traction level matched the app during the HCI capture). When the hub/bike turns off it reports level 0 / `UNKNOWN`; the component publishes `unknown` (not 0 %) for the level in that case.
-- **Not verified:** `odometer` (`Motor.distance`, uint32 / 100; unit assumed km), `motor_range`, `battery_range`, `speed`, `cadence`, `rider_power`, `assist_level`, battery health and raw voltage/current/capacity, and `motor_power_on_time_raw`. These come from static APK protocol definitions. The hub has not answered the health and power-on-time READs so far, and speed/cadence/power are only meaningful while riding.
+- **Seen on a live bike (idle, hub awake):** odometer, motor range, assist level, motor power-on time, wheel circumference, next-service distance, drive mode, and the motor/battery/hub type and firmware strings (see the protocol reference in the investigation docs). `battery_range`, speed, cadence and rider power did not answer while idle; `battery_health_soh` and the raw voltage/current/capacity did not answer at all on the tested battery.
+- **Not verified (older notes):** `odometer` (`Motor.distance`, uint32 / 100; unit assumed km), `motor_range`, `battery_range`, `speed`, `cadence`, `rider_power`, `assist_level`, battery health and raw voltage/current/capacity, and `motor_power_on_time_raw`. These come from static APK protocol definitions. The hub has not answered the health and power-on-time READs so far, and speed/cadence/power are only meaningful while riding.
 - Multi-byte values on the COBI bus are little-endian (the app decodes them from a little-endian buffer); the component reads them that way.
 - Unknown bus messages are logged once per distinct (action, channel, property) at INFO (`Unsupported COBI bus message ...`); this helps identify unmapped hub traffic.
 
@@ -93,6 +94,40 @@ cobi_bike:
     name: "E-bike rider power"
   assist_level:
     name: "E-bike assist level"
+  next_service_distance:
+    name: "E-bike next service distance"
+  wheel_circumference:
+    name: "E-bike wheel circumference"
+  drive_mode:
+    name: "E-bike drive mode (raw)"
+  supported_drive_modes:
+    name: "E-bike supported drive modes (raw)"
+  # Frame accelerometer, pushed ~3 times a second: throttle it.
+  frame_acceleration_forward:
+    name: "E-bike frame acceleration (forward)"
+    filters:
+      - throttle: 10s
+  frame_acceleration_vertical:
+    name: "E-bike frame acceleration (vertical)"
+    filters:
+      - throttle: 10s
+  # Diagnostic text sensors (read once per connection)
+  motor_type:
+    name: "E-bike motor type"
+  motor_firmware:
+    name: "E-bike motor firmware"
+  motor_part_number:
+    name: "E-bike motor part number"
+  battery_type:
+    name: "E-bike battery type"
+  battery_firmware:
+    name: "E-bike battery firmware"
+  battery_part_number:
+    name: "E-bike battery part number"
+  hub_firmware:
+    name: "COBI hub firmware"
+  display_interface:
+    name: "E-bike display type"
   link_status:
     name: "COBI BLE link status"
 ```

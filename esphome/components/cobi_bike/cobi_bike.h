@@ -37,6 +37,20 @@ class CobiBikeComponent final : public PollingComponent, public ble_client::BLEC
   void set_cadence_sensor(sensor::Sensor *sensor) { this->cadence_sensor_ = sensor; }
   void set_rider_power_sensor(sensor::Sensor *sensor) { this->rider_power_sensor_ = sensor; }
   void set_assist_level_sensor(sensor::Sensor *sensor) { this->assist_level_sensor_ = sensor; }
+  void set_next_service_distance_sensor(sensor::Sensor *sensor) { this->next_service_distance_sensor_ = sensor; }
+  void set_wheel_circumference_sensor(sensor::Sensor *sensor) { this->wheel_circumference_sensor_ = sensor; }
+  void set_drive_mode_sensor(sensor::Sensor *sensor) { this->drive_mode_sensor_ = sensor; }
+  void set_supported_drive_modes_sensor(sensor::Sensor *sensor) { this->supported_drive_modes_sensor_ = sensor; }
+  void set_frame_acceleration_forward_sensor(sensor::Sensor *sensor) { this->frame_acceleration_forward_sensor_ = sensor; }
+  void set_frame_acceleration_vertical_sensor(sensor::Sensor *sensor) { this->frame_acceleration_vertical_sensor_ = sensor; }
+  void set_motor_type_sensor(text_sensor::TextSensor *sensor) { this->motor_type_sensor_ = sensor; }
+  void set_motor_firmware_sensor(text_sensor::TextSensor *sensor) { this->motor_firmware_sensor_ = sensor; }
+  void set_motor_part_number_sensor(text_sensor::TextSensor *sensor) { this->motor_part_number_sensor_ = sensor; }
+  void set_battery_type_sensor(text_sensor::TextSensor *sensor) { this->battery_type_sensor_ = sensor; }
+  void set_battery_firmware_sensor(text_sensor::TextSensor *sensor) { this->battery_firmware_sensor_ = sensor; }
+  void set_battery_part_number_sensor(text_sensor::TextSensor *sensor) { this->battery_part_number_sensor_ = sensor; }
+  void set_hub_firmware_sensor(text_sensor::TextSensor *sensor) { this->hub_firmware_sensor_ = sensor; }
+  void set_display_interface_sensor(text_sensor::TextSensor *sensor) { this->display_interface_sensor_ = sensor; }
   void set_link_status_sensor(text_sensor::TextSensor *sensor) { this->link_status_sensor_ = sensor; }
 
   void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
@@ -54,6 +68,9 @@ class CobiBikeComponent final : public PollingComponent, public ble_client::BLEC
   void handle_lifecycle_state_(uint8_t state);
   bool send_bus_payload_(const uint8_t *payload, size_t length, const char *description);
   void send_read_batch_();
+  void queue_read_(uint8_t channel, uint8_t property);
+  void drain_read_queue_();
+  void handle_string_message_(uint8_t channel, uint8_t property, const uint8_t *payload, size_t payload_length);
   void handle_transport_value_(const uint8_t *data, size_t length);
   void handle_packet_(uint8_t type, const uint8_t *data, size_t length);
   void handle_bus_messages_(const uint8_t *data, size_t length);
@@ -78,6 +95,20 @@ class CobiBikeComponent final : public PollingComponent, public ble_client::BLEC
   sensor::Sensor *cadence_sensor_{nullptr};
   sensor::Sensor *rider_power_sensor_{nullptr};
   sensor::Sensor *assist_level_sensor_{nullptr};
+  sensor::Sensor *next_service_distance_sensor_{nullptr};
+  sensor::Sensor *wheel_circumference_sensor_{nullptr};
+  sensor::Sensor *drive_mode_sensor_{nullptr};
+  sensor::Sensor *supported_drive_modes_sensor_{nullptr};
+  sensor::Sensor *frame_acceleration_forward_sensor_{nullptr};
+  sensor::Sensor *frame_acceleration_vertical_sensor_{nullptr};
+  text_sensor::TextSensor *motor_type_sensor_{nullptr};
+  text_sensor::TextSensor *motor_firmware_sensor_{nullptr};
+  text_sensor::TextSensor *motor_part_number_sensor_{nullptr};
+  text_sensor::TextSensor *battery_type_sensor_{nullptr};
+  text_sensor::TextSensor *battery_firmware_sensor_{nullptr};
+  text_sensor::TextSensor *battery_part_number_sensor_{nullptr};
+  text_sensor::TextSensor *hub_firmware_sensor_{nullptr};
+  text_sensor::TextSensor *display_interface_sensor_{nullptr};
   text_sensor::TextSensor *link_status_sensor_{nullptr};
   std::array<uint16_t, 16> unsupported_seen_{};
   size_t unsupported_seen_count_{0};
@@ -108,6 +139,9 @@ class CobiBikeComponent final : public PollingComponent, public ble_client::BLEC
   bool counter_sync_ready_{true};
   bool session_ready_{false};
   bool unknown_message_logged_{false};
+  std::vector<std::array<uint8_t, 2>> pending_reads_;
+  uint32_t last_read_write_ms_{0};
+  bool static_info_requested_{false};
   bool discovery_scan_enabled_{false};
   bool discovery_scan_started_{false};
   size_t discovery_scan_index_{0};

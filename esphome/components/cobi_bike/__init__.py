@@ -33,6 +33,20 @@ CONF_SPEED = "speed"
 CONF_CADENCE = "cadence"
 CONF_RIDER_POWER = "rider_power"
 CONF_ASSIST_LEVEL = "assist_level"
+CONF_NEXT_SERVICE_DISTANCE = "next_service_distance"
+CONF_WHEEL_CIRCUMFERENCE = "wheel_circumference"
+CONF_DRIVE_MODE = "drive_mode"
+CONF_SUPPORTED_DRIVE_MODES = "supported_drive_modes"
+CONF_FRAME_ACCELERATION_FORWARD = "frame_acceleration_forward"
+CONF_FRAME_ACCELERATION_VERTICAL = "frame_acceleration_vertical"
+CONF_MOTOR_TYPE = "motor_type"
+CONF_MOTOR_FIRMWARE = "motor_firmware"
+CONF_MOTOR_PART_NUMBER = "motor_part_number"
+CONF_BATTERY_TYPE = "battery_type"
+CONF_BATTERY_FIRMWARE = "battery_firmware"
+CONF_BATTERY_PART_NUMBER = "battery_part_number"
+CONF_HUB_FIRMWARE = "hub_firmware"
+CONF_DISPLAY_INTERFACE = "display_interface"
 CONF_LINK_STATUS = "link_status"
 
 SENSOR_KEYS = {
@@ -50,11 +64,25 @@ SENSOR_KEYS = {
     CONF_CADENCE: "set_cadence_sensor",
     CONF_RIDER_POWER: "set_rider_power_sensor",
     CONF_ASSIST_LEVEL: "set_assist_level_sensor",
+    CONF_NEXT_SERVICE_DISTANCE: "set_next_service_distance_sensor",
+    CONF_WHEEL_CIRCUMFERENCE: "set_wheel_circumference_sensor",
+    CONF_DRIVE_MODE: "set_drive_mode_sensor",
+    CONF_SUPPORTED_DRIVE_MODES: "set_supported_drive_modes_sensor",
+    CONF_FRAME_ACCELERATION_FORWARD: "set_frame_acceleration_forward_sensor",
+    CONF_FRAME_ACCELERATION_VERTICAL: "set_frame_acceleration_vertical_sensor",
 }
 
 TEXT_SENSOR_KEYS = {
     CONF_TRACTION_BATTERY_STATE: "set_traction_battery_state_sensor",
     CONF_HUB_BATTERY_STATE: "set_hub_battery_state_sensor",
+    CONF_MOTOR_TYPE: "set_motor_type_sensor",
+    CONF_MOTOR_FIRMWARE: "set_motor_firmware_sensor",
+    CONF_MOTOR_PART_NUMBER: "set_motor_part_number_sensor",
+    CONF_BATTERY_TYPE: "set_battery_type_sensor",
+    CONF_BATTERY_FIRMWARE: "set_battery_firmware_sensor",
+    CONF_BATTERY_PART_NUMBER: "set_battery_part_number_sensor",
+    CONF_HUB_FIRMWARE: "set_hub_firmware_sensor",
+    CONF_DISPLAY_INTERFACE: "set_display_interface_sensor",
     CONF_LINK_STATUS: "set_link_status_sensor",
 }
 
@@ -118,6 +146,28 @@ CONFIG_SCHEMA = cv.All(
                 unit_of_measurement="W", accuracy_decimals=0, device_class="power", state_class="measurement"
             ),
             cv.Optional(CONF_ASSIST_LEVEL): sensor.sensor_schema(accuracy_decimals=0, icon="mdi:speedometer"),
+            cv.Optional(CONF_NEXT_SERVICE_DISTANCE): sensor.sensor_schema(
+                unit_of_measurement="km", accuracy_decimals=0, icon="mdi:wrench-clock", entity_category="diagnostic"
+            ),
+            cv.Optional(CONF_WHEEL_CIRCUMFERENCE): sensor.sensor_schema(
+                unit_of_measurement="mm", accuracy_decimals=0, icon="mdi:tire", entity_category="diagnostic"
+            ),
+            cv.Optional(CONF_DRIVE_MODE): RAW_SENSOR_SCHEMA,
+            cv.Optional(CONF_SUPPORTED_DRIVE_MODES): RAW_SENSOR_SCHEMA,
+            cv.Optional(CONF_FRAME_ACCELERATION_FORWARD): sensor.sensor_schema(
+                accuracy_decimals=0, icon="mdi:axis-x-arrow", entity_category="diagnostic", state_class="measurement"
+            ),
+            cv.Optional(CONF_FRAME_ACCELERATION_VERTICAL): sensor.sensor_schema(
+                accuracy_decimals=0, icon="mdi:axis-z-arrow", entity_category="diagnostic", state_class="measurement"
+            ),
+            cv.Optional(CONF_MOTOR_TYPE): text_sensor.text_sensor_schema(entity_category="diagnostic"),
+            cv.Optional(CONF_MOTOR_FIRMWARE): text_sensor.text_sensor_schema(entity_category="diagnostic"),
+            cv.Optional(CONF_MOTOR_PART_NUMBER): text_sensor.text_sensor_schema(entity_category="diagnostic"),
+            cv.Optional(CONF_BATTERY_TYPE): text_sensor.text_sensor_schema(entity_category="diagnostic"),
+            cv.Optional(CONF_BATTERY_FIRMWARE): text_sensor.text_sensor_schema(entity_category="diagnostic"),
+            cv.Optional(CONF_BATTERY_PART_NUMBER): text_sensor.text_sensor_schema(entity_category="diagnostic"),
+            cv.Optional(CONF_HUB_FIRMWARE): text_sensor.text_sensor_schema(entity_category="diagnostic"),
+            cv.Optional(CONF_DISPLAY_INTERFACE): text_sensor.text_sensor_schema(entity_category="diagnostic"),
             cv.Optional(CONF_LINK_STATUS): text_sensor.text_sensor_schema(),
         }
     )

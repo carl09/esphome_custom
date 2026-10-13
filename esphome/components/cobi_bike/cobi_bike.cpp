@@ -181,6 +181,8 @@ void CobiBikeComponent::reset_session_() {
   this->hub_awake_ = false;
   this->wake_write_sent_ = false;
   this->last_lifecycle_state_read_ms_ = 0;
+  this->pending_reads_.clear();
+  this->static_info_requested_ = false;
 }
 
 void CobiBikeComponent::update() {
@@ -190,6 +192,8 @@ void CobiBikeComponent::update() {
 }
 
 void CobiBikeComponent::loop() {
+  this->drain_read_queue_();
+
   if (this->discovery_scan_enabled_ && this->session_ready_ && this->c2p_handle_ != 0 && this->parent() != nullptr &&
       (!this->wake_hub_enabled_ || this->hub_awake_) && this->discovery_scan_index_ < DISCOVERY_SCAN_COUNT &&
       millis() - this->discovery_scan_last_ms_ >= DISCOVERY_SCAN_INTERVAL_MS) {
@@ -485,48 +489,90 @@ void CobiBikeComponent::maybe_initialize_transport_() {
   }
 }
 
+void CobiBikeComponent::queue_read_(uint8_t channel, uint8_t property) {
+  const std::array<uint8_t, 2> read = {channel, property};
+  if (std::find(this->pending_reads_.begin(), this->pending_reads_.end(), read) == this->pending_reads_.end())
+    this->pending_reads_.push_back(read);
+}
+
+// A COBI AIR COMPLETE packet with the compact header carries at most 8 bus bytes, i.e. four 2-byte READs, so
+// queued READs are sent four at a time.
+void CobiBikeComponent::drain_read_queue_() {
+  if (this->pending_reads_.empty() || !this->session_ready_ || (this->wake_hub_enabled_ && !this->hub_awake_) ||
+      this->c2p_handle_ == 0 || this->parent() == nullptr || millis() - this->last_read_write_ms_ < 150)
+    return;
+
+  std::array<uint8_t, 8> bus{};
+  size_t length = 0;
+  size_t taken = 0;
+  while (taken < this->pending_reads_.size() && length + 2 <= bus.size()) {
+    bus[length++] = static_cast<uint8_t>(this->pending_reads_[taken][0] << 2);  // V2 Action.READ
+    bus[length++] = this->pending_reads_[taken][1];
+    taken++;
+  }
+  if (this->send_bus_payload_(bus.data(), length, "telemetry READ batch")) {
+    this->last_read_write_ms_ = millis();
+    this->pending_reads_.erase(this->pending_reads_.begin(), this->pending_reads_.begin() + taken);
+  }
+}
+
 void CobiBikeComponent::send_read_batch_() {
   if (!this->session_ready_ || (this->wake_hub_enabled_ && !this->hub_awake_) || this->c2p_handle_ == 0 ||
       this->parent() == nullptr)
     return;
 
-  std::array<uint8_t, 32> bus{};
-  size_t length = 0;
-  const auto append_read = [&bus, &length](uint8_t channel, uint8_t property) {
-    bus[length++] = static_cast<uint8_t>(channel << 2);  // V2 Action.READ
-    bus[length++] = property;
-  };
-
   if (this->traction_battery_level_sensor_ != nullptr || this->traction_battery_state_sensor_ != nullptr)
-    append_read(5, 6);  // Battery.state
+    this->queue_read_(5, 6);  // Battery.state
   if (this->battery_health_soh_sensor_ != nullptr || this->battery_voltage_raw_sensor_ != nullptr ||
       this->battery_current_raw_sensor_ != nullptr || this->battery_capacity_raw_sensor_ != nullptr)
-    append_read(5, 8);  // Battery.health
+    this->queue_read_(5, 8);  // Battery.health
   if (this->hub_battery_level_sensor_ != nullptr || this->hub_battery_state_sensor_ != nullptr)
-    append_read(3, 30);  // Hub.internalBatteryState (distinct from traction battery)
+    this->queue_read_(3, 30);  // Hub.internalBatteryState (distinct from traction battery)
   if (this->motor_power_on_time_raw_sensor_ != nullptr)
-    append_read(7, 29);  // Motor.powerOnTime
-
-  // Motor channel (7) values; the bike may only answer while it is awake/riding.
+    this->queue_read_(7, 29);  // Motor.powerOnTime
   if (this->odometer_sensor_ != nullptr)
-    append_read(7, 8);  // Motor.distance (uint32 / 100)
+    this->queue_read_(7, 8);  // Motor.distance (uint32 / 100)
   if (this->motor_range_sensor_ != nullptr)
-    append_read(7, 11);  // Motor.range (uint16)
+    this->queue_read_(7, 11);  // Motor.range (uint16)
   if (this->battery_range_sensor_ != nullptr)
-    append_read(7, 18);  // Motor.batteryRange (uint32 / 100)
+    this->queue_read_(7, 18);  // Motor.batteryRange (uint32 / 100); only answered while riding
   if (this->speed_sensor_ != nullptr)
-    append_read(7, 6);  // Motor.speed (uint32 / 100)
+    this->queue_read_(7, 6);  // Motor.speed (uint32 / 100)
   if (this->cadence_sensor_ != nullptr)
-    append_read(7, 7);  // Motor.cadence (uint8)
+    this->queue_read_(7, 7);  // Motor.cadence (uint8)
   if (this->rider_power_sensor_ != nullptr)
-    append_read(7, 9);  // Motor.userPower (uint32 / 100)
+    this->queue_read_(7, 9);  // Motor.userPower (uint32 / 100)
   if (this->assist_level_sensor_ != nullptr)
-    append_read(7, 10);  // Motor.assistanceIndicator (uint8)
+    this->queue_read_(7, 10);  // Motor.assistanceIndicator (uint8)
+  if (this->next_service_distance_sensor_ != nullptr)
+    this->queue_read_(7, 25);  // Motor.nextService
+  if (this->wheel_circumference_sensor_ != nullptr)
+    this->queue_read_(7, 31);  // Motor.wheelCircumference (uint16 mm)
+  if (this->drive_mode_sensor_ != nullptr)
+    this->queue_read_(7, 13);  // Motor.driveMode (uint8)
+  if (this->supported_drive_modes_sensor_ != nullptr)
+    this->queue_read_(7, 12);  // Motor.supportedDriveModes (uint8)
 
-  if (length == 0)
-    return;
-
-  this->send_bus_payload_(bus.data(), length, "telemetry READ batch");
+  // Static identity strings and the display type only need reading once per session.
+  if (!this->static_info_requested_) {
+    this->static_info_requested_ = true;
+    if (this->motor_type_sensor_ != nullptr)
+      this->queue_read_(7, 28);
+    if (this->motor_firmware_sensor_ != nullptr)
+      this->queue_read_(7, 3);
+    if (this->motor_part_number_sensor_ != nullptr)
+      this->queue_read_(7, 1);
+    if (this->battery_type_sensor_ != nullptr)
+      this->queue_read_(5, 9);
+    if (this->battery_firmware_sensor_ != nullptr)
+      this->queue_read_(5, 3);
+    if (this->battery_part_number_sensor_ != nullptr)
+      this->queue_read_(5, 1);
+    if (this->hub_firmware_sensor_ != nullptr)
+      this->queue_read_(3, 3);
+    if (this->display_interface_sensor_ != nullptr)
+      this->queue_read_(3, 15);
+  }
 }
 
 void CobiBikeComponent::handle_transport_value_(const uint8_t *data, size_t length) {
@@ -616,6 +662,16 @@ size_t CobiBikeComponent::known_payload_length_(uint8_t action, uint8_t channel,
     return 1;  // uint8 (cadence, assistanceIndicator)
   if (channel == 7 && property == 11)
     return 2;  // uint16 Motor.range
+  if (channel == 7 && property == 25)
+    return 8;  // ServiceTrigger: uint32 timestamp + Decimal2 distance
+  if (channel == 7 && property == 31)
+    return 2;  // uint16 wheelCircumference (mm)
+  if (channel == 7 && (property == 12 || property == 13))
+    return 1;  // supportedDriveModes / driveMode (uint8)
+  if (channel == 7 && property == 32)
+    return 4;  // EbikeFrameAcceleration: int16 driving direction + int16 orthogonal
+  if (channel == 3 && property == 15)
+    return 1;  // ThumbControllerInterfaceId enum
   return SIZE_MAX;
 }
 
@@ -632,7 +688,15 @@ void CobiBikeComponent::handle_bus_messages_(const uint8_t *data, size_t length)
     const uint8_t action = header & 0x03;
     const uint8_t channel = header >> 2;
     const uint8_t property = data[offset++];
-    const size_t payload_length = this->known_payload_length_(action, channel, property);
+    size_t payload_length = this->known_payload_length_(action, channel, property);
+    if (payload_length == SIZE_MAX && action == 2 && offset < length) {
+      // V2 strings are length-prefixed (uint8).
+      const bool is_string = (channel == 7 && (property == 1 || property == 3 || property == 28)) ||
+                             (channel == 5 && (property == 1 || property == 3 || property == 9)) ||
+                             (channel == 3 && property == 3);
+      if (is_string)
+        payload_length = 1u + data[offset];
+    }
     if (payload_length == SIZE_MAX || payload_length > length - offset) {
       // Log each distinct (action, channel, property) once so unknown hub traffic can be identified.
       const uint16_t key = static_cast<uint16_t>((action << 14) | (channel << 8) | property);
@@ -716,6 +780,43 @@ void CobiBikeComponent::handle_bus_message_(uint8_t action, uint8_t channel, uin
   if (channel == 7 && property == 29 && payload_length == 4 && this->motor_power_on_time_raw_sensor_ != nullptr)
     this->motor_power_on_time_raw_sensor_->publish_state(read_u32_le(payload));
 
+  if (payload_length >= 1 && ((channel == 7 && (property == 1 || property == 3 || property == 28)) ||
+                              (channel == 5 && (property == 1 || property == 3 || property == 9)) ||
+                              (channel == 3 && property == 3)) &&
+      payload[0] + 1u == payload_length) {
+    this->handle_string_message_(channel, property, payload + 1, payload_length - 1);
+    return;
+  }
+  if (channel == 3 && property == 15 && payload_length == 1 && this->display_interface_sensor_ != nullptr) {
+    static const char *const NAMES[] = {"NONE", "COBI", "BOSCH_INTUVIA", "BOSCH_NYON", "TRANZX_DP27",
+                                        "BOSCH_INTUVIA_MY17", "BOSCH_KIOX"};
+    this->display_interface_sensor_->publish_state(payload[0] < 7 ? NAMES[payload[0]] : "UNRECOGNIZED");
+    return;
+  }
+  if (channel == 7 && property == 25 && payload_length == 8) {
+    if (this->next_service_distance_sensor_ != nullptr)
+      this->next_service_distance_sensor_->publish_state(static_cast<float>(read_u32_le(payload + 4)) / 100.0f);
+    return;
+  }
+  if (channel == 7 && property == 32 && payload_length == 4) {
+    if (this->frame_acceleration_forward_sensor_ != nullptr)
+      this->frame_acceleration_forward_sensor_->publish_state(static_cast<int16_t>(read_u16_le(payload)));
+    if (this->frame_acceleration_vertical_sensor_ != nullptr)
+      this->frame_acceleration_vertical_sensor_->publish_state(static_cast<int16_t>(read_u16_le(payload + 2)));
+    return;
+  }
+  if (channel == 7 && property == 31 && payload_length == 2) {
+    if (this->wheel_circumference_sensor_ != nullptr)
+      this->wheel_circumference_sensor_->publish_state(read_u16_le(payload));
+    return;
+  }
+  if (channel == 7 && (property == 12 || property == 13) && payload_length == 1) {
+    sensor::Sensor *target = property == 13 ? this->drive_mode_sensor_ : this->supported_drive_modes_sensor_;
+    if (target != nullptr)
+      target->publish_state(payload[0]);
+    return;
+  }
+
   if (channel == 7 && payload_length == 4) {
     const float value = static_cast<float>(read_u32_le(payload)) / 100.0f;
     sensor::Sensor *target = property == 8    ? this->odometer_sensor_
@@ -754,6 +855,25 @@ const char *CobiBikeComponent::battery_state_name_(uint8_t state) {
     default:
       return "UNRECOGNIZED";
   }
+}
+
+}  // namespace esphome::cobi_bike
+
+namespace esphome::cobi_bike {
+
+void CobiBikeComponent::handle_string_message_(uint8_t channel, uint8_t property, const uint8_t *payload,
+                                               size_t payload_length) {
+  text_sensor::TextSensor *target = nullptr;
+  if (channel == 7)
+    target = property == 28 ? this->motor_type_sensor_ : property == 3 ? this->motor_firmware_sensor_
+                                                                     : this->motor_part_number_sensor_;
+  else if (channel == 5)
+    target = property == 9 ? this->battery_type_sensor_ : property == 3 ? this->battery_firmware_sensor_
+                                                                       : this->battery_part_number_sensor_;
+  else if (channel == 3)
+    target = this->hub_firmware_sensor_;
+  if (target != nullptr)
+    target->publish_state(std::string(reinterpret_cast<const char *>(payload), payload_length));
 }
 
 }  // namespace esphome::cobi_bike
