@@ -185,6 +185,7 @@ void CobiBikeComponent::reset_session_() {
   this->last_lifecycle_state_read_ms_ = 0;
   this->pending_reads_.clear();
   this->static_info_requested_ = false;
+  this->first_p2c_received_ = false;
 }
 
 void CobiBikeComponent::update() {
@@ -646,9 +647,14 @@ void CobiBikeComponent::handle_transport_value_(const uint8_t *data, size_t leng
 
   const uint8_t counter = data[0];
   if (counter != this->expected_receive_counter_) {
-    ESP_LOGW(TAG, "COBI P2C transport counter was %u; expected %u", counter, this->expected_receive_counter_);
+    // The hub's counter continues from the previous session, so the first packet of a session normally differs.
+    if (this->first_p2c_received_)
+      ESP_LOGW(TAG, "COBI P2C transport counter was %u; expected %u", counter, this->expected_receive_counter_);
+    else
+      ESP_LOGD(TAG, "COBI P2C transport counter starts at %u", counter);
     this->fragment_buffer_.clear();
   }
+  this->first_p2c_received_ = true;
   this->expected_receive_counter_ = static_cast<uint8_t>(counter + 1);
 
   size_t offset = 1;

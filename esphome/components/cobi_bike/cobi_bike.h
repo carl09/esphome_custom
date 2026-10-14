@@ -146,6 +146,7 @@ class CobiBikeComponent final : public PollingComponent, public ble_client::BLEC
   bool static_info_requested_{false};
   // Reconnect robustness: encryption is requested on every connection to a bonded hub (not only with `pair: true`),
   // and a session that does not become ready in time is dropped so ESPHome's auto-connect can retry.
+  bool first_p2c_received_{false};
   bool connected_{false};
   bool encryption_requested_{false};
   bool force_encryption_{false};
