@@ -3,8 +3,11 @@
 #include "st7789_i80.h"
 #include "esphome/core/log.h"
 #include "esphome/core/application.h"
+#include "esphome/core/hal.h"
 #include "esphome/components/display/display_color_utils.h"
-#include <driver/gpio.h>
+#include <algorithm>
+#include <cstring>
+#include <inttypes.h>
 #include <esp_heap_caps.h>
 
 namespace esphome {
@@ -229,7 +232,7 @@ void ST7789I80::dump_config() {
                 this->data_pins_[2]->get_pin(), this->data_pins_[3]->get_pin(),
                 this->data_pins_[4]->get_pin(), this->data_pins_[5]->get_pin(), 
                 this->data_pins_[6]->get_pin(), this->data_pins_[7]->get_pin());
-  ESP_LOGCONFIG(TAG, "  Pixel Clock: %d Hz", this->pclk_frequency_);
+  ESP_LOGCONFIG(TAG, "  Pixel Clock: %" PRIu32 " Hz", this->pclk_frequency_);
   ESP_LOGCONFIG(TAG, "  Invert Colors: %s", YESNO(this->invert_colors_));
   ESP_LOGCONFIG(TAG, "  Swap XY: %s", YESNO(this->swap_xy_));
   ESP_LOGCONFIG(TAG, "  Mirror X: %s", YESNO(this->mirror_x_));
@@ -280,7 +283,7 @@ void ST7789I80::draw_pixels_at(int x_start, int y_start, int w, int h, const uin
       size_t bytes_this_chunk = pixels_this_chunk * bytes_per_pixel;
       
       // Copy to DMA-safe buffer
-      memcpy(this->dma_transfer_buffer_, src, bytes_this_chunk);
+      std::memcpy(this->dma_transfer_buffer_, src, bytes_this_chunk);
       
       // Send the chunk
       err = esp_lcd_panel_draw_bitmap(this->panel_handle_, x_start, y_pos,
@@ -303,9 +306,9 @@ void ST7789I80::draw_pixels_at(int x_start, int y_start, int w, int h, const uin
     
     for (int y = 0; y < h; y++) {
       // Copy row to DMA-safe buffer
-      memcpy(this->dma_transfer_buffer_, 
-             ptr + ((y + y_offset) * stride + x_offset * bytes_per_pixel),
-             row_bytes);
+      std::memcpy(this->dma_transfer_buffer_,
+                  ptr + ((y + y_offset) * stride + x_offset * bytes_per_pixel),
+                  row_bytes);
       
       err = esp_lcd_panel_draw_bitmap(this->panel_handle_, x_start, y + y_start,
                                        x_start + w, y + y_start + 1,

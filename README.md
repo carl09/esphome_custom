@@ -272,12 +272,21 @@ This component was created to support the **esp32-2432s022c** board. This board 
 
 **Configuration:**
 
+This component uses ESP-IDF's `esp_lcd` driver directly and requests that IDF component automatically. Native ESP-IDF framework example:
+
 ```yaml
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
 display:
   - platform: st7789_i80
     model: ESP32_2432S022C
     # ... standard display options
 ```
+
+The component has been compile-tested with ESPHome 2026.10.0 and ESP-IDF 5.5.6; it has not been flashed to hardware as part of this change.
 
 ### `irremote_debug`
 
