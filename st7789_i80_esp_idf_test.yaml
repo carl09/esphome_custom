@@ -1,0 +1,40 @@
+# Local USB/serial smoke test for the ST7789 I80 component.
+# Run from the repository root; the external component is loaded from this checkout.
+
+esphome:
+  name: st7789-i80-idf-test
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+    advanced:
+      # Enable only when the device boot log confirms bootloader support.
+      sram1_as_iram: true
+
+external_components:
+  - source:
+      type: local
+      path: esphome/components
+    components: [st7789_i80]
+
+logger:
+
+output:
+  - platform: ledc
+    pin: GPIO0
+    id: backlight_pwm
+    frequency: 2000 Hz
+
+light:
+  - platform: monochromatic
+    name: Display Backlight
+    output: backlight_pwm
+    restore_mode: ALWAYS_ON
+
+display:
+  - platform: st7789_i80
+    model: ESP32_2432S022C
+    update_interval: 5s
+    lambda: |-
+      it.fill(Color(0, 0, 255));
