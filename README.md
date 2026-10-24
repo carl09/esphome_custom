@@ -16,6 +16,24 @@ external_components:
 
 ## Available Components
 
+### `mipi_rgb` (RGB display bounce-buffer fix)
+
+An ESPHome 2026.10.0 `mipi_rgb` override that fixes LCD setup on panels whose
+height is not divisible by 10, including the Sunton ESP32-4827S043C (480x272).
+The driver chooses a bounce-buffer row count that divides the framebuffer
+exactly, as required by ESP-IDF. See [configuration and limitations](esphome/components/mipi_rgb/README.md).
+
+```yaml
+external_components:
+  - source:
+      type: git
+      url: https://github.com/carl09/esphome_custom
+      ref: fix/mipi-rgb-bounce-buffer
+    components: [mipi_rgb]
+    refresh: 0s
+```
+
+
 ### `cobi_bike` (COBI AIR telemetry; optional pairing and hub wake)
 
 Connects an ESP32 ESPHome node to the **COBI AIR** BLE transport (hub advertising as `Bosch Sm…`) and reads values from the hub. It exposes the traction-battery level/state, the hub's own battery (separately named, not the e-bike battery), and optional motor values: odometer, range, battery range, speed, cadence, rider power and assist level. Battery-health fields are available but did not answer on the tested battery (see below).
